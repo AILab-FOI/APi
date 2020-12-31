@@ -1,4 +1,6 @@
-#!/usr/bin/env bash
+#!/bin/bash
+shopt -s expand_aliases
+source $HOME/.bashrc
 
 case $1 in
     -gg|--grammar-gui)

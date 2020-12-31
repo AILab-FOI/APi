@@ -17,10 +17,11 @@ public class APiParser extends Parser {
 		new PredictionContextCache();
 	public static final int
 		T__0=1, T__1=2, T__2=3, T__3=4, T__4=5, T__5=6, T__6=7, T__7=8, T__8=9, 
-		T__9=10, T__10=11, IMPORT=12, ENVIRONMENT=13, ONSUCCESS=14, ONFAIL=15, 
-		RESTART=16, PARALLEL=17, START=18, SELF=19, AGENT=20, CHANNEL=21, SENDS=22, 
-		NIL=23, COMMENT=24, COMMENT1=25, COMMENT2=26, NEWLINE=27, TAB=28, VARIABLE=29, 
-		IDENT=30, STRING=31, NUMBER=32, SPACE=33;
+		T__9=10, T__10=11, STDIN=12, STDOUT=13, STDERR=14, VOID=15, IMPORT=16, 
+		ENVIRONMENT=17, ONSUCCESS=18, ONFAIL=19, RESTART=20, PARALLEL=21, START=22, 
+		SELF=23, AGENT=24, CHANNEL=25, FORMAT=26, SENDS=27, NIL=28, COMMENT=29, 
+		COMMENT1=30, COMMENT2=31, NEWLINE=32, TAB=33, VARIABLE=34, IDENT=35, STRING=36, 
+		NUMBER=37, SPACE=38;
 	public static final int
 		RULE_api_program = 0, RULE_s_environment = 1, RULE_ioflow = 2, RULE_s_start = 3, 
 		RULE_pi_expr = 4, RULE_s_agent = 5, RULE_arglist = 6, RULE_flow = 7, RULE_valid_channel = 8, 
@@ -38,18 +39,19 @@ public class APiParser extends Parser {
 	private static String[] makeLiteralNames() {
 		return new String[] {
 			null, "':'", "'('", "')'", "'{'", "','", "'}'", "'['", "']'", "'true'", 
-			"'false'", "'null'", "'import'", "'environment'", "'&'", "'!'", "'+'", 
-			"'|'", "'start'", "'self'", "'agent'", "'channel'", "'->'", "'0'"
+			"'false'", "'null'", "'stdin'", "'stdout'", "'stderr'", "'void'", "'import'", 
+			"'environment'", "'&'", "'!'", "'+'", "'|'", "'start'", "'self'", "'agent'", 
+			"'channel'", "'<->'", "'->'", "'0'"
 		};
 	}
 	private static final String[] _LITERAL_NAMES = makeLiteralNames();
 	private static String[] makeSymbolicNames() {
 		return new String[] {
 			null, null, null, null, null, null, null, null, null, null, null, null, 
-			"IMPORT", "ENVIRONMENT", "ONSUCCESS", "ONFAIL", "RESTART", "PARALLEL", 
-			"START", "SELF", "AGENT", "CHANNEL", "SENDS", "NIL", "COMMENT", "COMMENT1", 
-			"COMMENT2", "NEWLINE", "TAB", "VARIABLE", "IDENT", "STRING", "NUMBER", 
-			"SPACE"
+			"STDIN", "STDOUT", "STDERR", "VOID", "IMPORT", "ENVIRONMENT", "ONSUCCESS", 
+			"ONFAIL", "RESTART", "PARALLEL", "START", "SELF", "AGENT", "CHANNEL", 
+			"FORMAT", "SENDS", "NIL", "COMMENT", "COMMENT1", "COMMENT2", "NEWLINE", 
+			"TAB", "VARIABLE", "IDENT", "STRING", "NUMBER", "SPACE"
 		};
 	}
 	private static final String[] _SYMBOLIC_NAMES = makeSymbolicNames();
@@ -301,7 +303,7 @@ public class APiParser extends Parser {
 
 	public static class IoflowContext extends ParserRuleContext {
 		public TerminalNode IDENT() { return getToken(APiParser.IDENT, 0); }
-		public TerminalNode SENDS() { return getToken(APiParser.SENDS, 0); }
+		public TerminalNode FORMAT() { return getToken(APiParser.FORMAT, 0); }
 		public JsonContext json() {
 			return getRuleContext(JsonContext.class,0);
 		}
@@ -328,7 +330,7 @@ public class APiParser extends Parser {
 			setState(54);
 			match(IDENT);
 			setState(55);
-			match(SENDS);
+			match(FORMAT);
 			setState(56);
 			json();
 			}
@@ -752,6 +754,10 @@ public class APiParser extends Parser {
 		public TerminalNode IDENT() { return getToken(APiParser.IDENT, 0); }
 		public TerminalNode SELF() { return getToken(APiParser.SELF, 0); }
 		public TerminalNode NIL() { return getToken(APiParser.NIL, 0); }
+		public TerminalNode STDIN() { return getToken(APiParser.STDIN, 0); }
+		public TerminalNode STDOUT() { return getToken(APiParser.STDOUT, 0); }
+		public TerminalNode STDERR() { return getToken(APiParser.STDERR, 0); }
+		public TerminalNode VOID() { return getToken(APiParser.VOID, 0); }
 		public Valid_channelContext(ParserRuleContext parent, int invokingState) {
 			super(parent, invokingState);
 		}
@@ -775,7 +781,7 @@ public class APiParser extends Parser {
 			{
 			setState(122);
 			_la = _input.LA(1);
-			if ( !((((_la) & ~0x3f) == 0 && ((1L << _la) & ((1L << SELF) | (1L << NIL) | (1L << IDENT))) != 0)) ) {
+			if ( !((((_la) & ~0x3f) == 0 && ((1L << _la) & ((1L << STDIN) | (1L << STDOUT) | (1L << STDERR) | (1L << VOID) | (1L << SELF) | (1L << NIL) | (1L << IDENT))) != 0)) ) {
 			_errHandler.recoverInline(this);
 			}
 			else {
@@ -1327,7 +1333,7 @@ public class APiParser extends Parser {
 	}
 
 	public static final String _serializedATN =
-		"\3\u608b\ua72a\u8133\ub9ed\u417c\u3be7\u7786\u5964\3#\u00c1\4\2\t\2\4"+
+		"\3\u608b\ua72a\u8133\ub9ed\u417c\u3be7\u7786\u5964\3(\u00c1\4\2\t\2\4"+
 		"\3\t\3\4\4\t\4\4\5\t\5\4\6\t\6\4\7\t\7\4\b\t\b\4\t\t\t\4\n\t\n\4\13\t"+
 		"\13\4\f\t\f\4\r\t\r\4\16\t\16\4\17\t\17\4\20\t\20\4\21\t\21\4\22\t\22"+
 		"\3\2\3\2\3\2\3\2\3\2\3\2\3\2\7\2,\n\2\f\2\16\2/\13\2\3\3\3\3\3\3\3\3\6"+
@@ -1341,45 +1347,45 @@ public class APiParser extends Parser {
 		"\n\17\3\20\3\20\3\20\3\20\3\20\3\20\5\20\u00a6\n\20\3\21\3\21\3\21\3\21"+
 		"\7\21\u00ac\n\21\f\21\16\21\u00af\13\21\3\21\3\21\3\21\3\21\5\21\u00b5"+
 		"\n\21\3\22\3\22\3\22\3\22\3\22\3\22\3\22\3\22\5\22\u00bf\n\22\3\22\3-"+
-		"\3\n\23\2\4\6\b\n\f\16\20\22\24\26\30\32\34\36 \"\2\3\5\2\25\25\31\31"+
-		"  \2\u00cd\2-\3\2\2\2\4\60\3\2\2\2\68\3\2\2\2\b<\3\2\2\2\nE\3\2\2\2\f"+
-		"Y\3\2\2\2\16e\3\2\2\2\20o\3\2\2\2\22|\3\2\2\2\24~\3\2\2\2\26\u0084\3\2"+
-		"\2\2\30\u008a\3\2\2\2\32\u008e\3\2\2\2\34\u009d\3\2\2\2\36\u00a5\3\2\2"+
-		"\2 \u00b4\3\2\2\2\"\u00be\3\2\2\2$,\5\30\r\2%,\5\4\3\2&,\5\24\13\2\',"+
-		"\5\f\7\2(,\5\b\5\2),\7\32\2\2*,\7\35\2\2+$\3\2\2\2+%\3\2\2\2+&\3\2\2\2"+
-		"+\'\3\2\2\2+(\3\2\2\2+)\3\2\2\2+*\3\2\2\2,/\3\2\2\2-.\3\2\2\2-+\3\2\2"+
-		"\2.\3\3\2\2\2/-\3\2\2\2\60\61\7\17\2\2\61\62\7\3\2\2\62\64\7\35\2\2\63"+
+		"\3\n\23\2\4\6\b\n\f\16\20\22\24\26\30\32\34\36 \"\2\3\6\2\16\21\31\31"+
+		"\36\36%%\2\u00cd\2-\3\2\2\2\4\60\3\2\2\2\68\3\2\2\2\b<\3\2\2\2\nE\3\2"+
+		"\2\2\fY\3\2\2\2\16e\3\2\2\2\20o\3\2\2\2\22|\3\2\2\2\24~\3\2\2\2\26\u0084"+
+		"\3\2\2\2\30\u008a\3\2\2\2\32\u008e\3\2\2\2\34\u009d\3\2\2\2\36\u00a5\3"+
+		"\2\2\2 \u00b4\3\2\2\2\"\u00be\3\2\2\2$,\5\30\r\2%,\5\4\3\2&,\5\24\13\2"+
+		"\',\5\f\7\2(,\5\b\5\2),\7\37\2\2*,\7\"\2\2+$\3\2\2\2+%\3\2\2\2+&\3\2\2"+
+		"\2+\'\3\2\2\2+(\3\2\2\2+)\3\2\2\2+*\3\2\2\2,/\3\2\2\2-.\3\2\2\2-+\3\2"+
+		"\2\2.\3\3\2\2\2/-\3\2\2\2\60\61\7\23\2\2\61\62\7\3\2\2\62\64\7\"\2\2\63"+
 		"\65\5\6\4\2\64\63\3\2\2\2\65\66\3\2\2\2\66\64\3\2\2\2\66\67\3\2\2\2\67"+
-		"\5\3\2\2\289\7 \2\29:\7\30\2\2:;\5\32\16\2;\7\3\2\2\2<=\7\24\2\2=>\5\n"+
+		"\5\3\2\2\289\7%\2\29:\7\34\2\2:;\5\32\16\2;\7\3\2\2\2<=\7\30\2\2=>\5\n"+
 		"\6\2>\t\3\2\2\2?@\b\6\1\2@A\7\4\2\2AB\5\n\6\2BC\7\5\2\2CF\3\2\2\2DF\7"+
-		" \2\2E?\3\2\2\2ED\3\2\2\2FV\3\2\2\2GH\f\7\2\2HI\7\23\2\2IU\5\n\6\bJK\f"+
-		"\6\2\2KL\7\20\2\2LU\5\n\6\7MN\f\5\2\2NO\7\21\2\2OU\5\n\6\6PQ\f\4\2\2Q"+
-		"U\5\n\6\5RS\f\b\2\2SU\7\22\2\2TG\3\2\2\2TJ\3\2\2\2TM\3\2\2\2TP\3\2\2\2"+
-		"TR\3\2\2\2UX\3\2\2\2VT\3\2\2\2VW\3\2\2\2W\13\3\2\2\2XV\3\2\2\2YZ\7\26"+
-		"\2\2Z\\\7 \2\2[]\5\16\b\2\\[\3\2\2\2\\]\3\2\2\2]^\3\2\2\2^_\7\3\2\2_a"+
-		"\7\35\2\2`b\5\20\t\2a`\3\2\2\2bc\3\2\2\2ca\3\2\2\2cd\3\2\2\2d\r\3\2\2"+
-		"\2ef\7\4\2\2fj\7 \2\2gi\7 \2\2hg\3\2\2\2il\3\2\2\2jh\3\2\2\2jk\3\2\2\2"+
-		"km\3\2\2\2lj\3\2\2\2mn\7\5\2\2n\17\3\2\2\2op\7\36\2\2pq\5\22\n\2qr\7\30"+
-		"\2\2rw\5\22\n\2st\7\30\2\2tv\5\22\n\2us\3\2\2\2vy\3\2\2\2wu\3\2\2\2wx"+
-		"\3\2\2\2xz\3\2\2\2yw\3\2\2\2z{\7\35\2\2{\21\3\2\2\2|}\t\2\2\2}\23\3\2"+
-		"\2\2~\177\7\27\2\2\177\u0080\7 \2\2\u0080\u0081\7\3\2\2\u0081\u0082\7"+
-		"\35\2\2\u0082\u0083\5\26\f\2\u0083\25\3\2\2\2\u0084\u0085\7\36\2\2\u0085"+
-		"\u0086\5\32\16\2\u0086\u0087\7\30\2\2\u0087\u0088\5\32\16\2\u0088\u0089"+
-		"\7\35\2\2\u0089\27\3\2\2\2\u008a\u008b\7\16\2\2\u008b\u008c\7 \2\2\u008c"+
-		"\u008d\7\35\2\2\u008d\31\3\2\2\2\u008e\u008f\5\"\22\2\u008f\33\3\2\2\2"+
-		"\u0090\u0091\7\6\2\2\u0091\u0096\5\36\20\2\u0092\u0093\7\7\2\2\u0093\u0095"+
-		"\5\36\20\2\u0094\u0092\3\2\2\2\u0095\u0098\3\2\2\2\u0096\u0094\3\2\2\2"+
-		"\u0096\u0097\3\2\2\2\u0097\u0099\3\2\2\2\u0098\u0096\3\2\2\2\u0099\u009a"+
-		"\7\b\2\2\u009a\u009e\3\2\2\2\u009b\u009c\7\6\2\2\u009c\u009e\7\b\2\2\u009d"+
-		"\u0090\3\2\2\2\u009d\u009b\3\2\2\2\u009e\35\3\2\2\2\u009f\u00a0\7!\2\2"+
-		"\u00a0\u00a1\7\3\2\2\u00a1\u00a6\5\"\22\2\u00a2\u00a3\7\37\2\2\u00a3\u00a4"+
+		"%\2\2E?\3\2\2\2ED\3\2\2\2FV\3\2\2\2GH\f\7\2\2HI\7\27\2\2IU\5\n\6\bJK\f"+
+		"\6\2\2KL\7\24\2\2LU\5\n\6\7MN\f\5\2\2NO\7\25\2\2OU\5\n\6\6PQ\f\4\2\2Q"+
+		"U\5\n\6\5RS\f\b\2\2SU\7\26\2\2TG\3\2\2\2TJ\3\2\2\2TM\3\2\2\2TP\3\2\2\2"+
+		"TR\3\2\2\2UX\3\2\2\2VT\3\2\2\2VW\3\2\2\2W\13\3\2\2\2XV\3\2\2\2YZ\7\32"+
+		"\2\2Z\\\7%\2\2[]\5\16\b\2\\[\3\2\2\2\\]\3\2\2\2]^\3\2\2\2^_\7\3\2\2_a"+
+		"\7\"\2\2`b\5\20\t\2a`\3\2\2\2bc\3\2\2\2ca\3\2\2\2cd\3\2\2\2d\r\3\2\2\2"+
+		"ef\7\4\2\2fj\7%\2\2gi\7%\2\2hg\3\2\2\2il\3\2\2\2jh\3\2\2\2jk\3\2\2\2k"+
+		"m\3\2\2\2lj\3\2\2\2mn\7\5\2\2n\17\3\2\2\2op\7#\2\2pq\5\22\n\2qr\7\35\2"+
+		"\2rw\5\22\n\2st\7\35\2\2tv\5\22\n\2us\3\2\2\2vy\3\2\2\2wu\3\2\2\2wx\3"+
+		"\2\2\2xz\3\2\2\2yw\3\2\2\2z{\7\"\2\2{\21\3\2\2\2|}\t\2\2\2}\23\3\2\2\2"+
+		"~\177\7\33\2\2\177\u0080\7%\2\2\u0080\u0081\7\3\2\2\u0081\u0082\7\"\2"+
+		"\2\u0082\u0083\5\26\f\2\u0083\25\3\2\2\2\u0084\u0085\7#\2\2\u0085\u0086"+
+		"\5\32\16\2\u0086\u0087\7\35\2\2\u0087\u0088\5\32\16\2\u0088\u0089\7\""+
+		"\2\2\u0089\27\3\2\2\2\u008a\u008b\7\22\2\2\u008b\u008c\7%\2\2\u008c\u008d"+
+		"\7\"\2\2\u008d\31\3\2\2\2\u008e\u008f\5\"\22\2\u008f\33\3\2\2\2\u0090"+
+		"\u0091\7\6\2\2\u0091\u0096\5\36\20\2\u0092\u0093\7\7\2\2\u0093\u0095\5"+
+		"\36\20\2\u0094\u0092\3\2\2\2\u0095\u0098\3\2\2\2\u0096\u0094\3\2\2\2\u0096"+
+		"\u0097\3\2\2\2\u0097\u0099\3\2\2\2\u0098\u0096\3\2\2\2\u0099\u009a\7\b"+
+		"\2\2\u009a\u009e\3\2\2\2\u009b\u009c\7\6\2\2\u009c\u009e\7\b\2\2\u009d"+
+		"\u0090\3\2\2\2\u009d\u009b\3\2\2\2\u009e\35\3\2\2\2\u009f\u00a0\7&\2\2"+
+		"\u00a0\u00a1\7\3\2\2\u00a1\u00a6\5\"\22\2\u00a2\u00a3\7$\2\2\u00a3\u00a4"+
 		"\7\3\2\2\u00a4\u00a6\5\"\22\2\u00a5\u009f\3\2\2\2\u00a5\u00a2\3\2\2\2"+
 		"\u00a6\37\3\2\2\2\u00a7\u00a8\7\t\2\2\u00a8\u00ad\5\"\22\2\u00a9\u00aa"+
 		"\7\7\2\2\u00aa\u00ac\5\"\22\2\u00ab\u00a9\3\2\2\2\u00ac\u00af\3\2\2\2"+
 		"\u00ad\u00ab\3\2\2\2\u00ad\u00ae\3\2\2\2\u00ae\u00b0\3\2\2\2\u00af\u00ad"+
 		"\3\2\2\2\u00b0\u00b1\7\n\2\2\u00b1\u00b5\3\2\2\2\u00b2\u00b3\7\t\2\2\u00b3"+
 		"\u00b5\7\n\2\2\u00b4\u00a7\3\2\2\2\u00b4\u00b2\3\2\2\2\u00b5!\3\2\2\2"+
-		"\u00b6\u00bf\7\37\2\2\u00b7\u00bf\7!\2\2\u00b8\u00bf\7\"\2\2\u00b9\u00bf"+
+		"\u00b6\u00bf\7$\2\2\u00b7\u00bf\7&\2\2\u00b8\u00bf\7\'\2\2\u00b9\u00bf"+
 		"\5\34\17\2\u00ba\u00bf\5 \21\2\u00bb\u00bf\7\13\2\2\u00bc\u00bf\7\f\2"+
 		"\2\u00bd\u00bf\7\r\2\2\u00be\u00b6\3\2\2\2\u00be\u00b7\3\2\2\2\u00be\u00b8"+
 		"\3\2\2\2\u00be\u00b9\3\2\2\2\u00be\u00ba\3\2\2\2\u00be\u00bb\3\2\2\2\u00be"+
