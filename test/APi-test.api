@@ -1,0 +1,50 @@
+// Import holona
+
+import ivek
+
+
+// definicija kanala
+channel bla :
+	{ ?x : 123.321, '1':2 } -> { 'var' : ?x }
+
+channel juhu :
+	{ ?yaaa : "123.321", '1':{ 'a':2 } } -> { 'var' : ?yaaa }
+
+
+// definicija agenta
+agent a ( x y z ) :
+	x -> self -> z
+	self -> y
+	z -> c -> 0
+
+agent b :
+	self -> a
+
+
+// pokretanje agenata
+
+start a b c
+
+start ( a b ) | c
+
+start a b | c
+
+start a+ | b c
+
+start a ! b | c d
+
+start a & b
+
+// komunikacija s okružjem (drugim holonima ili game engine-ovima)
+
+environment :
+      input1 <-> { 'val1': ?x, 'val2': ?y }
+      output1 <-> { 'action': ?act }
+
+
+// komentari
+
+/*
+višelinijski
+komentar
+*/
