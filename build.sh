@@ -20,6 +20,18 @@ case $1 in
 	chmod +x APi.py
 	./APi.py
     ;;
+    -c|--commit)
+	if [ $# -eq 1 ]
+	then
+	    echo "No commit message supplied, aborting!"
+	else
+	    python3 version_control.py
+	    git add .
+	    git commit -m "$2"
+	    git push origin main
+	fi
+	
+    ;;
     *)    # unknown option
 	echo "Unknown argument, please explain yourself!"
     ;;
