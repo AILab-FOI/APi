@@ -3,7 +3,7 @@
 import re
 vre = re.compile( '([0-9][.][0-9][.][0-9])' )
 
-vstr = '__version__ = %d.%d.%d\n'
+vstr = '__version__ = "%d.%d.%d"\n'
 
 def main():
     vf = open( 'version.py' )

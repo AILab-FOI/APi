@@ -6,15 +6,19 @@ agent:
    leave it blank if you do not
    feel like writing a good
    description.
- type: unix-filter # unix-shell? (dva ili jedan?), docker, kubernetes-pod?
- start: grep uhu
+ type: unix # docker, kubernetes-pod 
+ start: sort | grep uhu
  input:
-  type: STDIN
-  data-type: STREAM
-  fmt: { "data":CHUNK }
-  delimiter: EOF # for others like 'grep' it might be NEWLINE
- output: 
-  type: STDOUT
-  data-type: STREAM
-  fmt: { "data":CHUNK }
-  delimiter: EOF
+  type: STDIN # FILE <filepath> ; HTTP <address>:<port> ; WS <address>:<port> ; NETCAT <cmd>
+  data-type: STREAM # ONEVALUE
+  fmt: { "data":DATA } # in STREAM data-type DATA is a chunk of data, in ONEVALUE it is all data
+  cutoff: DELIMITER NEWLINE # DELIMITER any character combination ;; TIME 0.02 - in seconds ;; SIZE 1024 - in bytes ;; REGEX (delim)|([\n])
+  end: <!eof!> # NEWLINE ; any character combination ;; only for STREAM data-type, ending delimiter
+  value-type: STRING # BINARY
+ output: # possibilities same as input
+  type: STDOUT 
+  data-type: DELIMITER
+  fmt: { "data":DATA }
+  cutoff: DELIMITER NEWLINE
+  end: EOF 
+  value-type: STRING

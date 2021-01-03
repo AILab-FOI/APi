@@ -3,12 +3,29 @@
 from version import __version__
 
 import sys
+import errno
 import os
+from time import sleep
 from itertools import tee, cycle
 from uuid import uuid4
 import subprocess as sp
 import shlex
 import pty
+import re
+import tempfile
+from threading import Thread
+
+file_re = re.compile( r'FILE (.*)' )
+http_re = re.compile( r'HTTP (.*):([0-9]+)' )
+ws_re  = re.compile( r'WS (.*):([0-9]+)' )
+netcat_re = re.compile( r'NETCAT (.*)' )
+
+delimiter_re = re.compile( r'DELIMITER (.*)' )
+time_re = re.compile( r'TIME ([0-9.]+)' )
+size_re = re.compile( r'SIZE ([0-9]+)' )
+regex_re = re.compile( r'REGEX .*' )
+
+NIE = 'Sorry, it is planned, I promise ;-)'
 
 from APiLexer import APiLexer
 from APiListener import APiListener
@@ -44,6 +61,118 @@ def pairwise( iterable ):
     next( b, None )
     return zip( a, b )
 
+def output_fifo( FIFO ):
+    '''
+    Generator function to create a named pipe (FIFO) that will
+    yield the output of a service (agent). Only to be used by
+    the service_output function.
+    '''
+    try:
+        os.mkfifo( FIFO )
+    except OSError as e:
+        if e.errno != errno.EEXIST:
+            raise
+
+    while True:
+        #print( "Output: Opening FIFO..." )
+        with open( FIFO ) as fifo:
+            #print( "Output: FIFO opened" )
+            while True:
+                data = fifo.readline()
+                if len( data ) == 0:
+                    #print( "Output: Writer closed ")
+                    return
+                #print( 'Output: read -> "{0}"'.format( data ) )
+                yield data
+
+def input_fifo( FIFO, DATA ):
+    '''
+    Input function that inputs DATA into a given named pipe
+    (FIFO). Only to be used by the service_input function. 
+    '''
+    #print( 'Input: data is', DATA )
+
+    try:
+        #print( "Input: FIFO opened" )
+        try:
+            data = FIFO.write( DATA )
+        except Exception as e:
+            print( e, DATA )
+        #print('Input: wrote -> "{0}"'.format( DATA ) )
+    except Exception as e:
+        #print( e )
+        pass
+
+def agent_fifo( FIFO_IN, FIFO_OUT, CMD ):
+    '''
+    Wrapper function around Unix filter (given in CMD). Redirects 
+    input from named pipe (FIFO_IN) to filter's STDIN and filter's 
+    STDOUT to named pipe (FIFO_OUT).
+    '''
+    cmd = 'cat %s | ' % FIFO_IN + CMD + ' | cat > %s' % FIFO_OUT
+    #print( 'Agent:', cmd )
+    os.system( cmd )
+
+'''    
+fifo_in = '/tmp/APi/' + next( tempfile._get_candidate_names() ) 
+fifo_out = '/tmp/APi/' + next( tempfile._get_candidate_names() )
+
+cmd = 'sort | grep bla | wc'
+cmd = 'grep bla'
+data = [ 'bla %d\n' % i for i in range( 100 ) ]
+data = 'bla\nhshsbla\n'
+'''
+
+def service_input( data, fifo_in ):
+    '''
+    Service input function (must be called in separate thread).
+    Argument data is a chunk of data to be written to the services
+    STDIN.
+    '''
+    try:
+        os.mkfifo( fifo_in )
+    except OSError as e:
+        if e.errno != errno.EEXIST:
+            raise
+        
+    fifo = open( fifo_in, mode='w' )
+    input_fifo( fifo, data )
+    
+    
+
+def service_output( callback, fifo_out ):
+    '''
+    Service output function (must be called in separate thread).
+    Callback function is called for any output line returned by 
+    the current started service (agent).
+    '''
+    for i in output_fifo( fifo_out ):
+        callback( i )
+
+'''
+t1 = Thread( target=service_input, args=( data, fifo_in ) )
+t4 = Thread( target=service_input, args=( 'bababla\nhhdhd\nblabla\n', ) )        
+t2 = Thread( target=agent_fifo, args=( fifo_in, fifo_out, cmd ) )
+t3 = Thread( target=service_output, args=( print, fifo_out ) )
+
+
+t2.start()
+
+t3.start()
+
+t1.start()
+t4.start()
+
+
+#t1.join()
+
+#t2.join()
+
+#t3.join()
+'''
+
+
+    
 class APiIOError( IOError ):
     '''Exception thrown when a file (usually agent definition is not present.'''
     pass
@@ -117,30 +246,48 @@ class APiAgent( APiBaseAgent ):
             self.input_type = self.descriptor[ 'agent' ][ 'input' ][ 'type' ]
             self.input_data_type = self.descriptor[ 'agent' ][ 'input' ][ 'data-type' ]
             self.input_fmt = self.descriptor[ 'agent' ][ 'input' ][ 'fmt' ]
-            self.input_delimiter = self.descriptor[ 'agent' ][ 'input' ][ 'delimiter' ]
+            self.input_cutoff = self.descriptor[ 'agent' ][ 'input' ][ 'cutoff' ]
+            self.input_end = self.descriptor[ 'agent' ][ 'input' ][ 'end' ]
+            self.input_value_type = self.descriptor[ 'agent' ][ 'input' ][ 'value-type' ]
             self.output_type = self.descriptor[ 'agent' ][ 'output' ][ 'type' ]
             self.output_data_type = self.descriptor[ 'agent' ][ 'output' ][ 'data-type' ]
             self.output_fmt = self.descriptor[ 'agent' ][ 'output' ][ 'fmt' ]
-            self.output_delimiter = self.descriptor[ 'agent' ][ 'output' ][ 'delimiter' ]
+            self.output_cutoff = self.descriptor[ 'agent' ][ 'output' ][ 'cutoff' ]
+            self.output_end = self.descriptor[ 'agent' ][ 'output' ][ 'end' ]
+            self.output_value_type = self.descriptor[ 'agent' ][ 'output' ][ 'value-type' ]
         except Exception as e:
             err = 'Agent definition file is invalid.\n' + str( e )
             raise APiAgentDefinitionError( err )
 
-        if self.type == 'unix-filter':
+        if self.type == 'unix':
             # only for testing, need to filter by agent definition (e.g. data-type, fmt etc)
-            self.cmd = shlex.split( self.descriptor[ 'agent' ][ 'start' ] )
-            print( self.cmd )
-            self.master, self.slave = pty.openpty()
-            self.process = sp.Popen( self.cmd, stdin=sp.PIPE, stdout=self.slave, universal_newlines=True )
-            self.stdinh = self.process.stdin
-            self.stdouth = os.fdopen( self.master )
+            self.cmd = self.descriptor[ 'agent' ][ 'start' ]
+
+            try:
+                self.process_input()
+            except Exception as e:
+                err = 'Agent definition file is invalid.\n' + str( e )
+                raise APiAgentDefinitionError( err )
             
-        elif self.type == 'unix-shell':
-            raise NotImplementedError( 'Sorry, it is planned, I promise ;-)' )
+
+            self.fifo_in = '/tmp/APi/' + next( tempfile._get_candidate_names() )
+            self.fifo_out = '/tmp/APi/' + next( tempfile._get_candidate_names() )
+            
+            self.agent_thread = Thread( target=agent_fifo, args=( self.fifo_in, self.fifo_out, self.cmd ) )
+            self.output_thread = Thread( target=service_output, args=( self.output_callback, self.fifo_out ) )
+
+            self.output_thread.start()
+            self.agent_thread.start()
+
+            self.threads = []
+
+            self.input = self.input_unix
+            self.output = lambda: print( 'njanjanjanjanjanja' )
+            
         elif self.type == 'docker':
-            raise NotImplementedError( 'Sorry, it is planned, I promise ;-)' )
+            raise NotImplementedError( NIE )
         elif self.type == 'kubernetes':
-            raise NotImplementedError( 'Sorry, it is planned, I promise ;-)' )
+            raise NotImplementedError( NIE )
         else:
             err = 'Invalid agent type: %s' % self.type
             raise APiAgentDefinitionError( err )
@@ -148,12 +295,89 @@ class APiAgent( APiBaseAgent ):
         
         self.say( self.descriptor )
 
-    def input( self, data ):
-        self.stdinh.write( data )
-        self.stdinh.flush()
+    def input_unix( self, data ):
+        if data == self.input_end:
+            self.service_quit()
+            return None
+        if self.input_value_type == 'BINARY':
+            data = data.encode( 'utf-8' )
+        t = Thread( target=service_input, args=( data, self.fifo_in ) )
+        t.start()
+        self.threads.append( t )
+            
 
-    def output( self ):
-        return self.stdouth.readline()
+    def output_callback( self, data ):
+        self.say( 'I just received:', data )
+
+    def output_unix( self ):
+        print( 'Reading data' )
+        data = self.fifo_out.read()
+        print( data, '... Done!' )
+        if len( data ) == 0:
+            return None # Process has finished
+        else:
+            return data
+
+    def service_quit( self ):
+        self.say( 'Got end delimiter, quitting!' ) # firstly need to clean up and finish all threads
+        for t in self.threads:
+            #print( t, t.is_alive() )
+            t.join( timeout=2 )
+            # Not sure if timeout should be used here to force joining.
+            # Some input threads hang sometimes and never send the data.
+            #print( 'Joined!' )
+        self.agent_thread.join()
+        self.output_thread.join()
+
+    def process_input( self ):
+        if self.input_type == 'STDIN':
+            inp_pipe = sp.PIPE
+        elif self.input_type[ :4 ] == 'FILE':
+            fl = file_re.findall( self.input_type )[ 0 ]
+            inp_pipe = open( fl )
+        elif self.input_type[ :4 ] == 'HTTP':
+            host, port = http_re.findall( self.input_type )[ 0 ]
+            print( host, port )
+            raise NotImplementedError( NIE )
+        elif self.input_type[ :2 ] == 'WS':
+            host, port = ws_re.findall( self.input_type )[ 0 ]
+            print( host, port )
+            raise NotImplementedError( NIE )
+        elif self.input_type[ :6 ] == 'NETCAT':
+            cmd = netcat_re.findall( self.input_type )[ 0 ]
+            print( cmd )
+            raise NotImplementedError( NIE )
+        else:
+            err = 'Invalid input type "%s"\n' % self.input_type
+            raise APiAgentDefinitionError( err )
+
+        if self.input_value_type not in [ 'STRING', 'BINARY' ]:
+            err = 'Invalid input value type "%s"\n' % self.input_value_type
+            raise APiAgentDefinitionError( err )
+
+        if self.input_data_type == 'ONEVALUE':
+            pass
+        elif self.input_data_type == 'STREAM':
+            if self.input_cutoff[ :4 ] == 'TIME':
+                time = float( time_re.findall( self.input_cutoff )[ 0 ] )
+                print( time )
+                raise NotImplementedError( NIE )                
+            elif self.input_cutoff[ :4 ] == 'SIZE':
+                size = int( size_re.findall( self.input_cutoff )[ 0 ] )
+                print( size )
+                raise NotImplementedError( NIE ) 
+            elif self.input_cutoff[ :9 ] == 'DELIMITER':
+                delimiter = delimiter_re.findall( self.input_cutoff )[ 0 ]
+                print( delimiter )
+                if delimiter == 'NEWLINE':
+                    delimiter = '\n'               
+            elif self.input_cutoff[ :5 ] == 'REGEX':
+                regex = int( regex_re.findall( self.input_cutoff )[ 0 ] )
+                print( regex )
+                raise NotImplementedError( NIE ) 
+            else:
+                err = 'Invalid input data type "%s"\n' % self.input_data_type
+                raise APiAgentDefinitionError( err )
 
 class APiHolon( APiBaseAgent ):
     '''A holon created by another api file.'''
@@ -391,7 +615,7 @@ class APi( APiListener ):
 
 
 '''
-Pinguin ASCII art by apx stolen from:
+Penguin ASCII art by apx stolen from:
 http://www.ascii-art.de/ascii/pqr/penguins.txt
 '''
 
@@ -462,20 +686,19 @@ if __name__ == '__main__':
     except Exception as e:
         error( e )
     '''
-    '''os.chdir('test')
-    rs = APiRegistrationService( 'APi-test' )
-    rs.register( 'ivek' )
+    os.chdir('test')
+    '''rs = APiRegistrationService( 'APi-test' )
+    rs.register( 'ivek' )'''
 
     a = APiAgent( 'bla0', 'bla0agent@dragon.foi.hr', 'tajna', flows=[ (1, 2), (3, 4), (1, 5), (3, 6), (1, 3, 5, 7) ] )
+
+
     a.input( 'juhu\n' )
     a.input( 'muhu\n' )
     a.input( 'ahu\n' )
-    print( a.output() )
-    a.input( 'guhu\n\buhu\nwuhu\n' )
-    print( a.output() )
-    print( a.output() )
-    print( a.output() )
-    print( a.output() )
-    print( ns )'''
+    a.input( 'puhu\nluhu\n' )
+    a.input( 'avauhu\nguhu\nbuhu\nwuhu\n\ncuhu\n' )
+    a.input( '<!eof!>' )
+    print( ns )
     main()
 
