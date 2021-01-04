@@ -371,23 +371,25 @@ class APiAgent( APiBaseAgent ):
             data = data.encode( 'utf-8' )
         if data == self.input_end:
             self.service_quit( 'Got end delimiter, quitting NETCAT!' )
+            self.nc_client.close()
             return None
         if self.input_delimiter:
             inp = [ i for i in data.split( self.input_delimiter ) if i != '' ]
         else:
             imp = [ data ]
         sleep( 0.1 )
+        for i in inp:
+            try:
+                self.nc_client.send( data )
+            except Exception as e:
+                self.service_quit( 'NETCAT process ended, quitting!' )
+                return None
+
         try:
-            nc = nclib.Netcat( ( self.nc_host, self.nc_port ), udp=self.nc_udp )
+            res = self.nc_client.recv().decode( 'utf-8' )
         except Exception as e:
             self.service_quit( 'NETCAT process ended, quitting!' )
             return None
-        for i in inp:
-            nc.send( data )
-
-        sleep( 0.1 )
-        res = nc.recv().decode( 'utf-8' )
-        nc.close()
         # TODO: if self.output_delimiter: ...
         delimiter = '\n'
         out = [ i for i in res.split( delimiter ) if i != '' ]
@@ -463,7 +465,15 @@ class APiAgent( APiBaseAgent ):
             self.nc_port = int( port )
             self.nc_udp = udp != ''
             cmd = '%s > /dev/null 2>&1 &' % self.cmd
-            os.system( cmd )
+            self.nc_proc = sp.Popen( shlex.split( cmd ), shell=True, stdout=sp.DEVNULL, stderr=sp.DEVNULL )
+            sleep( 0.1 )
+            error = True
+            while error:
+                try:
+                    self.nc_client = nclib.Netcat( ( self.nc_host, self.nc_port ), udp=self.nc_udp )
+                    error = False
+                except:
+                    sleep( 0.1 )
             self.input = self.input_nc
         else:
             err = 'Invalid input type "%s"\n' % self.input_type
