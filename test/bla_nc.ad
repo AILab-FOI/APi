@@ -15,7 +15,7 @@ agent:
   cutoff: DELIMITER NEWLINE # DELIMITER any character combination ;; TIME 0.02 - in seconds ;; SIZE 1024 - in bytes ;; REGEX (delim)|([\n])
   end: <!eof!> # NEWLINE ; any character combination ;; only for STREAM data-type, ending delimiter
   value-type: STRING # BINARY
- output: # possibilities same as input
+ output: # possibilities same as input except type can be STDOUT or STDERR
   type: STDOUT 
   data-type: STREAM
   fmt: { "data":DATA }

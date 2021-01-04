@@ -258,6 +258,7 @@ class APiAgent( APiBaseAgent ):
             self.http_proc = None
             self.ws_proc = None
             self.nc_proc = None
+            self.output_nc_thread = None
             self.agent_thread = None
             self.output_thread = None
             # TODO: Put fifo_out into self.process_output()
@@ -371,6 +372,7 @@ class APiAgent( APiBaseAgent ):
             data = data.encode( 'utf-8' )
         if data == self.input_end:
             self.service_quit( 'Got end delimiter, quitting NETCAT!' )
+            sleep( 0.5 )
             self.nc_client.close()
             return None
         if self.input_delimiter:
@@ -380,21 +382,28 @@ class APiAgent( APiBaseAgent ):
         sleep( 0.1 )
         for i in inp:
             try:
-                self.nc_client.send( data )
+                # TODO: add output delimiter here
+                delimiter = '\n'
+                self.nc_client.send( i + delimiter )
             except Exception as e:
                 self.service_quit( 'NETCAT process ended, quitting!' )
                 return None
 
-        try:
-            res = self.nc_client.recv().decode( 'utf-8' )
-        except Exception as e:
-            self.service_quit( 'NETCAT process ended, quitting!' )
-            return None
+    def output_nc_thread( self ):
+        error = False
         # TODO: if self.output_delimiter: ...
         delimiter = '\n'
-        out = [ i for i in res.split( delimiter ) if i != '' ]
-        for i in out:
-            self.output_callback( i )
+        while not error:
+            if not self.nc_output_thread_flag:
+                return None
+            try:
+                res = self.nc_client.recv_until( delimiter, timeout=1 ).decode( 'utf-8' )
+            except Exception as e:
+                self.error = True
+                self.service_quit( 'NETCAT process ended, quitting!' )
+                return None
+            if res:
+                self.output_callback( res )
 
             
             
@@ -426,7 +435,15 @@ class APiAgent( APiBaseAgent ):
             self.ws_proc.terminate()
 
         if self.nc_proc:
+            pid = self.nc_proc.pid
             self.nc_proc.terminate()
+            os.system( 'kill -9 %d' % pid )
+
+        self.nc_output_thread_flag = False
+        try:
+             self.nc_output_thread.join()
+        except Exception as e:
+            print( 'Quitting:', e )
         
         if self.fifo_in:
             os.remove( self.fifo_in )
@@ -475,6 +492,9 @@ class APiAgent( APiBaseAgent ):
                 except:
                     sleep( 0.1 )
             self.input = self.input_nc
+            self.nc_output_thread_flag = True
+            self.nc_output_thread = Thread( target=self.output_nc_thread )
+            self.nc_output_thread.start()
         else:
             err = 'Invalid input type "%s"\n' % self.input_type
             raise APiAgentDefinitionError( err )
