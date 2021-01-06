@@ -1,13 +1,13 @@
 agent:
- name: bla0
+ name: bla_stdin_stderr
  description: >
-   A cool little bla0 agent.
+   A cool little bla_stdin_stderr agent.
    This part is optional. Just
    leave it blank if you do not
    feel like writing a good
    description.
  type: unix # docker, kubernetes-pod 
- start: sort | grep uhu
+ start: cat | grep 
  input:
   type: STDIN #  STDIN ; FILE <filepath> ; HTTP <address>:<port>/<url> ; WS <address>:<port> ; NETCAT <cmd>
   data-type: STREAM # ONEVALUE
@@ -16,7 +16,7 @@ agent:
   end: <!eof!> # NEWLINE ; any character combination ;; only for STREAM data-type, ending delimiter
   value-type: STRING # BINARY
  output: # possibilities same as input
-  type: STDOUT 
+  type: STDERR 
   data-type: STREAM
   fmt: { "data":DATA }
   cutoff: DELIMITER NEWLINE
