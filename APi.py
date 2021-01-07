@@ -174,7 +174,24 @@ class APiAgent( APiBaseAgent ):
             self.nc_proc = None
             self.output_nc_threaded = None
             self.nc_output_thread = None
-            # TODO: Put fifo_out into self.process_output()
+
+            # Threads
+
+            # STDIN threads
+            self.stdinout_thread = None
+            self.stdinfile_thread = None
+            self.stdinhttp_thread = None
+            self.stdinws_thread = None
+            self.stdinnc_thread = None
+            self.stdinncrec_thread = None
+
+            # FILE threads
+            self.filestdout_thread = None
+            self.filefile_thread = None
+            self.filehttp_thread = None
+            self.filews_thread = None
+            self.filenc_thread = None
+            self.filencrec_thread = None
             
             try:
                 self.process_descriptor()
@@ -205,6 +222,11 @@ class APiAgent( APiBaseAgent ):
         fh.write( data )
         fh.close()
         self.input_file_written = True
+        # TODO: This needs to be synchronized with
+        # processes reading the file (i.e. the process
+        # should not start until the file has been
+        # written. Also the service should not stop
+        # until the process has read the file.
         self.service_quit( 'Input file written, quitting!' )
 
 
@@ -324,7 +346,7 @@ class APiAgent( APiBaseAgent ):
         error = False
         while not error:
             try:
-                result = ncclient.recv_until( self.output_delimiter )
+                result = ncclient.recv_until( self.output_delimiter, timeout=0.2 )
                 sleep( 0.5 )
                 if result:
                     result = result.decode()
@@ -354,7 +376,6 @@ class APiAgent( APiBaseAgent ):
                         await stdin.drain()
                         await asyncio.sleep( 0.1 )
                     except ConnectionResetError as e:
-                        print( e )
                         self.service_quit( 'STDIN connection reset, quitting!' )
                         break
         stdin.close()
@@ -449,6 +470,59 @@ class APiAgent( APiBaseAgent ):
 
         await asyncio.gather( self.read_file( file_path ) )
 
+    async def input_filehttp_run( self, cmd, file_path, url ):
+        proc = await asyncio.create_subprocess_shell(
+            cmd,
+            stdin=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.DEVNULL )
+
+        await asyncio.gather( self.read_url( url ) )
+
+        try:
+            pid = proc.pid
+            pr = psutil.Process( pid )
+            for proc in pr.children( recursive=True ): 
+                proc.kill()
+            pr.kill()
+        except:
+            pass
+
+    async def input_filews_run( self, cmd, file_path, url ):
+        proc = await asyncio.create_subprocess_shell(
+            cmd,
+            stdin=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.DEVNULL )
+
+        await asyncio.gather( self.read_ws( url ) )
+
+        try:
+            pid = proc.pid
+            pr = psutil.Process( pid )
+            for proc in pr.children( recursive=True ): 
+                proc.kill()
+            pr.kill()
+        except:
+            pass
+
+    async def input_filenc_run( self, cmd, file_path ):
+        proc = await asyncio.create_subprocess_shell(
+            cmd,
+            stdin=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.DEVNULL )
+        while not self.input_file_written:
+            await asyncio.sleep( 0.1 )
+        try:
+            pid = proc.pid
+            pr = psutil.Process( pid )
+            for proc in pr.children( recursive=True ): 
+                proc.kill()
+            pr.kill()
+        except Exception as e:
+            pass
+        
     def input_http( self, data ):
         if self.input_value_type == 'BINARY':
             data = data.encode( 'utf-8' )
@@ -527,23 +601,33 @@ class APiAgent( APiBaseAgent ):
         sleep( 0.5 )
         self.say( msg ) # firstly need to clean up and finish all threads
         try:
-            if self.stdinout_thread.alive():
+            if self.stdinout_thread:
                 self.stdinout_thread.join()
-            if self.stdinfile_thread.alive():
+            if self.stdinfile_thread:
                 self.stdinfile_thread.join()
-            if self.stdinhttp_thread.alive():
+            if self.stdinhttp_thread:
                 self.stdinhttp_thread.join()
-            if self.stdinws_thread.alive():
+            if self.stdinws_thread:
                 self.stdinws_thread.join()
-            if self.stdinnc_thread.alive():
+            if self.stdinnc_thread:
                 self.stdinnc_thread.join()
-            if self.stdinncrec_thread.alive():
+            if self.stdinncrec_thread:
                 self.stdinncrec_thread.join()
-            if self.filestdout_thread.alive():
+            if self.filestdout_thread:
                 self.filestdout_thread.join()
-            if self.filefile_thread.alive():
+            if self.filefile_thread:
                 self.filefile_thread.join()
-        except:
+            if self.filehttp_thread:
+                self.filehttp_thread.join()
+            if self.filews_thread:
+                self.filews_thread.join()
+            if self.filenc_thread:
+                self.filenc_thread.join()
+            if self.filencrec_thread:
+                self.filencrec_thread.join()
+            if self.nc_output_thread:
+                self.nc_output_thread.join()
+        except Exception as e:
             pass
 
         if self.http_proc:
@@ -562,8 +646,6 @@ class APiAgent( APiBaseAgent ):
             self.nc_proc.terminate()
             os.system( 'kill -9 %d' % pid )
         self.nc_output_thread_flag = False
-        if self.nc_output_thread:
-             self.nc_output_thread.join()
         
     def process_descriptor( self ):
         if self.input_data_type == 'ONEVALUE':
@@ -696,6 +778,35 @@ class APiAgent( APiBaseAgent ):
             self.input = self.input_file
             url = http_re.findall( self.output_type )[ 0 ]
             self.output_url = url
+            self.filehttp_thread = Thread( target=asyncio.run, args=( self.input_filehttp_run( self.cmd, self.input_file_path, self.output_url ), ) )
+            self.filehttp_thread.start()
+
+        elif self.input_type[ :4 ] == 'FILE' and self.output_type[ :2 ] == 'WS':
+            fl = file_re.findall( self.input_type )[ 0 ]
+            self.input_file_path = fl
+            self.input_file_written = False
+            self.input = self.input_file
+            url = ws_re.findall( self.output_type )[ 0 ]
+            self.output_url = url
+            self.filews_thread = Thread( target=asyncio.run, args=( self.input_filews_run( self.cmd, self.input_file_path, self.output_url ), ) )
+            self.filews_thread.start()
+
+        elif self.input_type[ :4 ] == 'FILE' and self.output_type[ :6 ] == 'NETCAT':
+            fl = file_re.findall( self.input_type )[ 0 ]
+            self.input_file_path = fl
+            self.input_file_written = False
+            self.input = self.input_file
+            host, port, udp = netcat_re.findall( self.output_type )[ 0 ]
+            self.nc_host = host
+            self.nc_port = int( port )
+            self.nc_udp = udp != ''
+
+            
+            self.filenc_thread = Thread( target=asyncio.run, args=( self.input_filenc_run( self.cmd, self.input_file_path ), ) )
+            self.filenc_thread.start()
+            self.filencrec_thread = Thread( target=self.read_nc, args=( self.nc_host, self.nc_port, self.nc_udp ) )
+            self.filencrec_thread.start() 
+            
             # TODO: add adequate threads and finish other outputs
         elif self.input_type[ :4 ] == 'HTTP':
             cmd = shlex.split( self.cmd + ' > /dev/null 2>&1 &' )
@@ -722,7 +833,6 @@ class APiAgent( APiBaseAgent ):
                     self.nc_client = nclib.Netcat( ( self.nc_host, self.nc_port ), udp=self.nc_udp )
                     error = False
                 except Exception as e:
-                    print( e )
                     sleep( 0.1 )
             self.nc_output_thread_flag = True
             self.nc_output_thread = Thread( target=self.output_nc_threaded )
@@ -1069,7 +1179,7 @@ if __name__ == '__main__':
     '''rs = APiRegistrationService( 'APi-test' )
     rs.register( 'ivek' )'''
 
-    a = APiAgent( 'bla_file_file', 'bla0agent@dragon.foi.hr', 'tajna', flows=[ (1, 2), (3, 4), (1, 5), (3, 6), (1, 3, 5, 7) ] )
+    a = APiAgent( 'bla_file_nc', 'bla0agent@dragon.foi.hr', 'tajna', flows=[ (1, 2), (3, 4), (1, 5), (3, 6), (1, 3, 5, 7) ] )
 
     sleep( 1 )
     a.input( 'avauhu\nguhu\nbuhu\nwuhu\ncuhu\n' )
@@ -1085,4 +1195,6 @@ if __name__ == '__main__':
     
     print( ns )
     main()
+
+    spade.quit_spade()
 

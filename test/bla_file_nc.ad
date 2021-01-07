@@ -1,13 +1,13 @@
 agent:
- name: bla_file_http
+ name: bla_file_nc
  description: >
-   A cool little bla_file_http agent.
+   A cool little bla_file_nc agent.
    This part is optional. Just
    leave it blank if you do not
    feel like writing a good
    description.
  type: unix # docker, kubernetes-pod 
- start: cat input_test.txt | python3 stdin_server.py
+ start: cat input_test.txt | ncat -l -p 1234
  input:
   type: FILE input_test.txt #  STDIN ; FILE <filepath> ; HTTP <address>:<port>/<url> ; WS <address>:<port> ; NETCAT <cmd>
   data-type: STREAM # ONEVALUE
@@ -16,7 +16,7 @@ agent:
   end: <!eof!> # NEWLINE ; any character combination ;; only for STREAM data-type, ending delimiter
   value-type: STRING # BINARY
  output: # possibilities same as input
-  type: HTTP http://localhost:2709/ 
+  type: NETCAT localhost:1234 
   data-type: STREAM
   fmt: { "data":DATA }
   cutoff: DELIMITER NEWLINE
