@@ -14,6 +14,7 @@ import shlex
 import psutil
 import re
 import tempfile
+import threading
 from threading import Thread
 
 file_re = re.compile( r'FILE (.*)' )
@@ -259,20 +260,19 @@ class APiAgent( APiBaseAgent ):
 
     async def read_stdout( self, stdout ):
         while True:
-            buf = await stdout.readline()
+            buf =  await stdout.readline() 
             if not buf:
                 break
 
-            if self.output_type == 'STDOUT':
+            if self.output_type == 'STDOUT' and buf:
                 self.output_callback( buf.decode() )
 
 
     async def read_stderr( self, stderr ):
         while True:
-            buf = await stderr.read()
+            buf = await stderr.readline()
             if not buf:
                 break
-
             
             if self.output_type == 'STDERR':
                 self.output_callback( buf.decode() )
@@ -322,7 +322,6 @@ class APiAgent( APiBaseAgent ):
                             for r in res:
                                 self.output_callback( r )
                         except asyncio.TimeoutError:
-                            print( 'TIMEOUT' )
                             not_timeout = False
                     error = False
             except Exception as e:
@@ -522,8 +521,29 @@ class APiAgent( APiBaseAgent ):
             pr.kill()
         except Exception as e:
             pass
+
+    async def input_httpstdout_run( self, cmd ):
+        proc = await asyncio.create_subprocess_shell(
+            cmd,
+            stderr=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE )
+
         
-    def input_http( self, data ):
+        await asyncio.gather(
+            self.read_stderr( proc.stderr ),
+            self.read_stdout( proc.stdout ) )
+        
+        
+        try:
+            pid = proc.pid
+            pr = psutil.Process( pid )
+            for proc in pr.children( recursive=True ): 
+                proc.kill()
+            pr.kill()
+        except:
+            pass
+        
+    def input_http( self, data, callback=False ):
         if self.input_value_type == 'BINARY':
             data = data.encode( 'utf-8' )
         if self.input_delimiter:
@@ -531,20 +551,26 @@ class APiAgent( APiBaseAgent ):
         else:
             imp = [ data ]
         for d in inp:
-            if d == self.input_end:
-                self.service_quit( 'Received end delimiter, shutting down HTTP server!' )
-                return
             url = self.http_url + d
             error = True
             while error:
                 try:
                     response = requests.get( url, verify=False )
                     result = response.content.decode( 'utf-8' )
-                    # TODO: define different outputs based on agent definition
-                    self.output_callback( result )
+                    if callback:
+                        if self.output_delimiter:
+                            out = [ i for i in result.split( self.output_delimiter ) if i ]
+                        else:
+                            out = [ result ]
+                        for i in out:
+                            self.output_callback( i )
                     error = False
                 except Exception as e:
                     sleep( 0.2 )
+            if d == self.input_end:
+                #self.input_is_done = True
+                self.service_quit( 'Received end delimiter, shutting down HTTP server!' )
+                return
 
     def input_ws( self, data ):
         if self.input_value_type == 'BINARY':
@@ -588,7 +614,6 @@ class APiAgent( APiBaseAgent ):
                 # TODO: add output delimiter here
                 delimiter = '\n'
                 self.nc_client.send( i + delimiter )
-                #print( 'input_nc: sent', i )
             except Exception as e:
                 self.service_quit( 'NETCAT process ended, quitting!' )
                 return None
@@ -627,6 +652,8 @@ class APiAgent( APiBaseAgent ):
                 self.filencrec_thread.join()
             if self.nc_output_thread:
                 self.nc_output_thread.join()
+            if self.httpstdout_thread:
+                self.httpstdout_thread.join()
         except Exception as e:
             pass
 
@@ -806,14 +833,33 @@ class APiAgent( APiBaseAgent ):
             self.filenc_thread.start()
             self.filencrec_thread = Thread( target=self.read_nc, args=( self.nc_host, self.nc_port, self.nc_udp ) )
             self.filencrec_thread.start() 
+
+        elif self.input_type[ :4 ] == 'HTTP' and self.output_type in ( 'STDOUT', 'STDERR' ):
+            url = http_re.findall( self.input_type )[ 0 ]
+            self.http_url = url
+            self.input = self.input_http #lambda data: Thread( target=self.input_http, args=( data, ) ).start()
+            #self.input_is_done = False
+
+            self.httpstdout_thread = Thread( target=asyncio.run, args=( self.input_httpstdout_run( self.cmd ),  ) )
+            self.httpstdout_thread.start()
+            #cmd = shlex.split( self.cmd )
+            #self.http_proc = sp.Popen( cmd, stdout=sp.PIPE, stderr=sp.PIPE )
+            #self.httpstdout_thread = Thread( target=self.read_stdout_threaded, args=( self.http_proc.stdout, ) )
+            #self.httpstdout_thread.start()
             
             # TODO: add adequate threads and finish other outputs
-        elif self.input_type[ :4 ] == 'HTTP':
+        elif self.input_type[ :4 ] == 'HTTP' and self.output_type[ :4 ] == 'HTTP':
             cmd = shlex.split( self.cmd + ' > /dev/null 2>&1 &' )
             self.http_proc = sp.Popen( cmd, stdout=sp.DEVNULL, stderr=sp.DEVNULL )
             url = http_re.findall( self.input_type )[ 0 ]
             self.http_url = url
-            self.input = self.input_http
+            url = http_re.findall( self.input_type )[ 0 ]
+            self.http_url_output = url
+            if self.http_url == self.http_url_output:
+                self.input = lambda data: self.input_http( data, callback=True )
+            else:
+                # TODO implement thread
+                pass
         elif self.input_type[ :2 ] == 'WS':
             url = ws_re.findall( self.input_type )[ 0 ]
             cmd = shlex.split( self.cmd + ' > /dev/null 2>&1 &' )
@@ -1179,11 +1225,11 @@ if __name__ == '__main__':
     '''rs = APiRegistrationService( 'APi-test' )
     rs.register( 'ivek' )'''
 
-    a = APiAgent( 'bla_file_nc', 'bla0agent@dragon.foi.hr', 'tajna', flows=[ (1, 2), (3, 4), (1, 5), (3, 6), (1, 3, 5, 7) ] )
+    a = APiAgent( 'bla_http_http', 'bla0agent@dragon.foi.hr', 'tajna', flows=[ (1, 2), (3, 4), (1, 5), (3, 6), (1, 3, 5, 7) ] )
 
     sleep( 1 )
     a.input( 'avauhu\nguhu\nbuhu\nwuhu\ncuhu\n' )
-    '''sleep( 3 )
+    sleep( 3 )
     a.input( 'juhu\n' )
     sleep( 2 )
     a.input( 'muhu\n' )
@@ -1191,10 +1237,12 @@ if __name__ == '__main__':
     sleep( 1 )
     a.input( 'puhu\nluhu\n' )
     sleep( 2 )
-    a.input( '<!eof!>' )'''
+    a.input( '<!eof!>' )
     
     print( ns )
-    main()
 
+    
+    main()
+    
     spade.quit_spade()
 
