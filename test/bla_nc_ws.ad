@@ -1,22 +1,22 @@
 agent:
- name: bla_nc
+ name: bla_nc_ws
  description: >
-   A cool little bla_nc agent.
+   A cool little bla_nc_ws agent.
    This part is optional. Just
    leave it blank if you do not
    feel like writing a good
    description.
  type: unix # docker, kubernetes-pod 
- start: ncat -lk -p 2709 -c ./echo_shell.sh
+ start: ncat -l -p 2709 | ./stdin_ws_server.py
  input:
-  type: NETCAT localhost:2709 #  STDIN ; FILE <filepath> ; HTTP <url> (make sure to include trailing / if needed) ; WS <url> ; NETCAT <host>:<port>[:<udp>] (ex. localhost:1234:udp ; default is tcp)
+  type: NETCAT localhost:2709 #  STDIN ; FILE <filepath> ; HTTP <url> (make sure to include trailing / if needed) ; WS <url> ; NETCAT <host>:<port>[:<udp>]
   data-type: STREAM # ONEVALUE
   fmt: { "data":DATA } # in STREAM data-type DATA is a chunk of data, in ONEVALUE it is all data
   cutoff: DELIMITER NEWLINE # DELIMITER any character combination ;; TIME 0.02 - in seconds ;; SIZE 1024 - in bytes ;; REGEX (delim)|([\n])
   end: <!eof!> # NEWLINE ; any character combination ;; only for STREAM data-type, ending delimiter
   value-type: STRING # BINARY
- output: # possibilities same as input except type can be STDOUT or STDERR
-  type: NETCAT localhost:2709 
+ output: # possibilities same as input
+  type: WS ws://localhost:3618/
   data-type: STREAM
   fmt: { "data":DATA }
   cutoff: DELIMITER NEWLINE

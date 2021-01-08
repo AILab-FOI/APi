@@ -356,6 +356,7 @@ class APiAgent( APiBaseAgent ):
                 ncclient = nclib.Netcat( ( host, port ), udp=udp, raise_eof=True )
                 not_available = False
             except Exception as e:
+                print( e )
                 sleep( 0.2 )
 
         error = False
@@ -371,6 +372,8 @@ class APiAgent( APiBaseAgent ):
                         res = [ result ]
                     for r in res:
                         self.output_callback( r )
+                elif self.input_ended:
+                    raise Exception( 'Done' )
             except Exception as e:
                 error = True
                 
@@ -821,8 +824,59 @@ class APiAgent( APiBaseAgent ):
         except:
             pass
 
+    async def input_nchttp_run( self, cmd, url ):
+        proc = await asyncio.create_subprocess_shell(
+            cmd,
+            stdin=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.DEVNULL )
+
+        await asyncio.gather( self.read_url( url ) )
+
+        try:
+            pid = proc.pid
+            pr = psutil.Process( pid )
+            for proc in pr.children( recursive=True ): 
+                proc.kill()
+            pr.kill()
+        except:
+            pass
+
+    async def input_ncws_run( self, cmd, url ):
+        proc = await asyncio.create_subprocess_shell(
+            cmd )
+        
+        await asyncio.gather( self.read_ws( url ) )
                 
-    def input_nc( self, data ):
+        try:
+            pid = proc.pid
+            pr = psutil.Process( pid )
+            for proc in pr.children( recursive=True ): 
+                proc.kill()
+            pr.kill()
+        except:
+            pass
+
+    async def input_ncnc_run( self, cmd ):
+        proc = await asyncio.create_subprocess_shell(
+            cmd,
+            stdin=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.DEVNULL )
+        
+        while not self.input_ended:
+            sleep( 0.1 )
+            
+        try:
+            pid = proc.pid
+            pr = psutil.Process( pid )
+            for proc in pr.children( recursive=True ): 
+                proc.kill()
+            pr.kill()
+        except Exception as e:
+            pass
+                
+    def input_nc( self, data, callback=False ):
         if self.input_value_type == 'BINARY':
             data = data.encode( 'utf-8' )
         if data == self.input_end:
@@ -836,10 +890,19 @@ class APiAgent( APiBaseAgent ):
         sleep( 0.1 )
         for i in inp:
             try:
-                # TODO: add output delimiter here
-                delimiter = '\n'
-                self.nc_client.send( i + delimiter )
+                self.nc_client.sendline( i.encode( 'utf-8' ) )
+                if callback:
+                    result = self.nc_client.read( timeout=1 ).decode( 'utf-8' )
+                    if result:
+                        if self.output_delimiter:
+                            result = [ j for j in result.split( self.output_delimiter ) if j ]
+                        else:
+                            result = [ result ]
+                        for j in result:
+                            self.output_callback( j )
+                    
             except Exception as e:
+                print( e )
                 self.nc_client.close()
                 self.service_quit( 'NETCAT process ended, quitting!' )
                 return None
@@ -1258,15 +1321,19 @@ class APiAgent( APiBaseAgent ):
                     error = False
                 except Exception as e:
                     sleep( 0.1 )
-            
-            # TODO: add adequate threads and finish other outputs
-        elif self.input_type[ :6 ] == 'NETCAT':
+
+        elif self.input_type[ :6 ] == 'NETCAT' and self.output_type[ :4 ] == 'HTTP':
             host, port, udp = netcat_re.findall( self.input_type )[ 0 ]
             self.nc_host = host
             self.nc_port = int( port )
             self.nc_udp = udp != ''
-            self.nc_proc = sp.Popen( shlex.split( self.cmd ), stdout=sp.PIPE, stderr=sp.DEVNULL )
-            sleep( 0.1 )
+            self.input = self.input_nc
+            url = http_re.findall( self.output_type )[ 0 ]
+            self.output_url = url
+            
+            self.nchttp_thread = Thread( target=asyncio.run, args=( self.input_nchttp_run( self.cmd, self.output_url ), ) )
+            self.nchttp_thread.start()
+            
             error = True
             while error:
                 try:
@@ -1274,10 +1341,75 @@ class APiAgent( APiBaseAgent ):
                     error = False
                 except Exception as e:
                     sleep( 0.1 )
-            self.nc_output_thread_flag = True
-            self.nc_output_thread = Thread( target=self.output_nc_threaded )
-            self.nc_output_thread.start()
+
+        elif self.input_type[ :6 ] == 'NETCAT' and self.output_type[ :2 ] == 'WS':
+            host, port, udp = netcat_re.findall( self.input_type )[ 0 ]
+            self.nc_host = host
+            self.nc_port = int( port )
+            self.nc_udp = udp != ''
             self.input = self.input_nc
+            url = ws_re.findall( self.output_type )[ 0 ]
+            self.ws_output_url = url
+            
+            self.ncws_thread = Thread( target=asyncio.run, args=( self.input_ncws_run( self.cmd, self.ws_output_url ), ) )
+            self.ncws_thread.start()
+            
+            error = True
+            while error:
+                try:
+                    self.nc_client = nclib.Netcat( ( self.nc_host, self.nc_port ), udp=self.nc_udp )
+                    error = False
+                except Exception as e:
+                    sleep( 0.1 )
+                    
+            # TODO: add adequate threads and finish other outputs
+        elif self.input_type[ :6 ] == 'NETCAT' and self.output_type[ :6 ] == 'NETCAT':
+            host, port, udp = netcat_re.findall( self.input_type )[ 0 ]
+            self.nc_host = host
+            self.nc_port = int( port )
+            self.nc_udp = udp != ''
+            
+            ohost, oport, oudp = netcat_re.findall( self.output_type )[ 0 ]
+            self.nc_host_output = ohost
+            self.nc_port_output = int( oport )
+            self.nc_udp_output = oudp != ''
+
+
+            if ( host, port, udp ) == ( ohost, oport, oudp ):
+                self.nc_proc = sp.Popen( shlex.split( self.cmd ), stdout=sp.PIPE, stderr=sp.DEVNULL )
+                sleep( 0.1 )
+                self.input = lambda data: self.input_nc( data, callback=True )
+
+                error = True
+                while error:
+                    try:
+                        self.nc_client = nclib.Netcat( ( self.nc_host, self.nc_port ), udp=self.nc_udp )
+                        error = False
+                    except Exception as e:
+                        sleep( 0.1 )
+
+            else:
+                self.input = self.input_nc
+                self.ncnc_thread = Thread( target=asyncio.run, args=( self.input_ncnc_run( self.cmd ), ) )
+                self.ncnc_thread.start()
+    
+                error = True
+                while error:
+                    try:
+                        self.nc_client = nclib.Netcat( ( self.nc_host, self.nc_port ), udp=self.nc_udp )
+                        
+                        error = False
+                    except Exception as e:
+                        sleep( 0.1 )
+            
+                self.ncncrec_thread = Thread( target=self.read_nc, args=( self.nc_host_output, self.nc_port_output, self.nc_udp_output ) )
+                self.ncncrec_thread.start()
+
+            
+            
+
+            
+            
         else:
             err = 'Invalid input type "%s"\n' % self.input_type
             raise APiAgentDefinitionError( err )
@@ -1294,8 +1426,10 @@ class APiAgent( APiBaseAgent ):
             if not self.nc_output_thread_flag:
                 return None
             try:
-                res = self.nc_client.recv_until( delimiter, timeout=1 ).decode( 'utf-8' )
+                res = self.nc_client.recv_until( self.output_delimiter, timeout=1 ).decode( 'utf-8' )
+                print( res )
             except Exception as e:
+                print( e )
                 self.error = True
                 self.service_quit( 'NETCAT process ended, quitting!' )
                 return None
@@ -1619,7 +1753,7 @@ if __name__ == '__main__':
     '''rs = APiRegistrationService( 'APi-test' )
     rs.register( 'ivek' )'''
 
-    a = APiAgent( 'bla_nc_file', 'bla0agent@dragon.foi.hr', 'tajna', flows=[ (1, 2), (3, 4), (1, 5), (3, 6), (1, 3, 5, 7) ] )
+    a = APiAgent( 'bla_nc_nc', 'bla0agent@dragon.foi.hr', 'tajna', flows=[ (1, 2), (3, 4), (1, 5), (3, 6), (1, 3, 5, 7) ] )
 
     sleep( 1 )
     a.input( 'avauhu\nguhu\nbuhu\nwuhu\ncuhu\n' )
