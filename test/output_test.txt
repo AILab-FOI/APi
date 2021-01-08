@@ -3,9 +3,3 @@ guhu
 buhu
 wuhu
 cuhu
-juhu
-muhu
-ahu
-puhu
-luhu
-<!eof!>

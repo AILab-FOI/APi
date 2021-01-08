@@ -787,6 +787,41 @@ class APiAgent( APiBaseAgent ):
             except Exception as e:
                 sleep( 0.2 )
 
+    async def input_ncstdout_run( self, cmd ):
+        proc = await asyncio.create_subprocess_shell(
+            cmd,
+            stderr=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE )
+
+        await asyncio.gather(
+            self.read_stderr( proc.stderr ),
+            self.read_stdout( proc.stdout ) )
+    
+        try:
+            pid = proc.pid
+            pr = psutil.Process( pid )
+            for proc in pr.children( recursive=True ): 
+                proc.kill()
+            pr.kill()
+        except:
+            pass
+
+    async def input_ncfile_run( self, cmd, file_path ):
+        proc = await asyncio.create_subprocess_shell(
+            cmd )
+
+        await asyncio.gather( self.read_file( file_path ) )
+                
+        try:
+            pid = proc.pid
+            pr = psutil.Process( pid )
+            for proc in pr.children( recursive=True ): 
+                proc.kill()
+            pr.kill()
+        except:
+            pass
+
+                
     def input_nc( self, data ):
         if self.input_value_type == 'BINARY':
             data = data.encode( 'utf-8' )
@@ -805,6 +840,7 @@ class APiAgent( APiBaseAgent ):
                 delimiter = '\n'
                 self.nc_client.send( i + delimiter )
             except Exception as e:
+                self.nc_client.close()
                 self.service_quit( 'NETCAT process ended, quitting!' )
                 return None
 
@@ -1179,6 +1215,49 @@ class APiAgent( APiBaseAgent ):
             self.wsnc_thread.start()
             self.wsncrec_thread = Thread( target=self.read_nc, args=( self.nc_host, self.nc_port, self.nc_udp ) )
             self.wsncrec_thread.start()
+
+        
+        elif self.input_type[ :6 ] == 'NETCAT' and self.output_type in ( 'STDOUT', 'STDERR' ):
+            host, port, udp = netcat_re.findall( self.input_type )[ 0 ]
+            self.nc_host = host
+            self.nc_port = int( port )
+            self.nc_udp = udp != ''
+            self.input = self.input_nc
+            
+            self.ncstdout_thread = Thread( target=asyncio.run, args=( self.input_ncstdout_run( self.cmd ), ) )
+            self.ncstdout_thread.start()
+
+            error = True
+            while error:
+                try:
+                    self.nc_client = nclib.Netcat( ( self.nc_host, self.nc_port ), udp=self.nc_udp )
+                    error = False
+                except Exception as e:
+                    sleep( 0.1 )
+
+        elif self.input_type[ :6 ] == 'NETCAT' and self.output_type[ :4 ] == 'FILE':
+            host, port, udp = netcat_re.findall( self.input_type )[ 0 ]
+            self.nc_host = host
+            self.nc_port = int( port )
+            self.nc_udp = udp != ''
+            fl = file_re.findall( self.output_type )[ 0 ]
+            self.output_file_path = fl
+            self.input = self.input_nc
+            
+            self.ncfile_thread = Thread( target=asyncio.run, args=( self.input_ncfile_run( self.cmd, self.output_file_path ),  ) )
+            self.ncfile_thread.start()
+            # TODO: find out why only the first output is processed, i.e.
+            # ncat writes to the file and closes it seemingly after each
+            # input making it possible for read_file() to read it an end
+            # prematurely. See if this can be avoided.
+            
+            error = True
+            while error:
+                try:
+                    self.nc_client = nclib.Netcat( ( self.nc_host, self.nc_port ), udp=self.nc_udp )
+                    error = False
+                except Exception as e:
+                    sleep( 0.1 )
             
             # TODO: add adequate threads and finish other outputs
         elif self.input_type[ :6 ] == 'NETCAT':
@@ -1540,7 +1619,7 @@ if __name__ == '__main__':
     '''rs = APiRegistrationService( 'APi-test' )
     rs.register( 'ivek' )'''
 
-    a = APiAgent( 'bla_ws_nc', 'bla0agent@dragon.foi.hr', 'tajna', flows=[ (1, 2), (3, 4), (1, 5), (3, 6), (1, 3, 5, 7) ] )
+    a = APiAgent( 'bla_nc_file', 'bla0agent@dragon.foi.hr', 'tajna', flows=[ (1, 2), (3, 4), (1, 5), (3, 6), (1, 3, 5, 7) ] )
 
     sleep( 1 )
     a.input( 'avauhu\nguhu\nbuhu\nwuhu\ncuhu\n' )
