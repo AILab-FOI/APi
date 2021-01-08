@@ -175,6 +175,7 @@ class APiAgent( APiBaseAgent ):
             self.nc_proc = None
             self.output_nc_threaded = None
             self.nc_output_thread = None
+            self.input_ended = None
 
             # Threads
 
@@ -193,6 +194,22 @@ class APiAgent( APiBaseAgent ):
             self.filews_thread = None
             self.filenc_thread = None
             self.filencrec_thread = None
+
+            # HTTP threads
+            self.httpstdout_thread = None
+            self.httpfile_thread = None
+            self.httphttp_thread = None
+            self.httpws_thread = None
+            self.httpnc_thread = None
+            self.httpncrec_thread = None
+
+            # WS threads
+            self.wsstdout_thread = None
+            self.wsfile_thread = None
+            self.wshttp_thread = None
+            self.wsws_thread = None
+            self.wsnc_thread = None
+            self.wsncrec_thread = None
             
             try:
                 self.process_descriptor()
@@ -310,7 +327,6 @@ class APiAgent( APiBaseAgent ):
         while error:
             try:
                 async with websockets.connect( url ) as websocket:
-                    #resp = await websocket.recv()
                     not_timeout = True
                     while not_timeout:
                         try:
@@ -542,6 +558,81 @@ class APiAgent( APiBaseAgent ):
             pr.kill()
         except:
             pass
+
+    async def input_httphttp_run( self, cmd, url ):
+        proc = await asyncio.create_subprocess_shell(
+            cmd,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL )
+
+        
+        await asyncio.gather(
+            self.read_url( url ) )
+        
+        while not self.input_ended:
+            sleep( 0.1 )
+        
+        try:
+            pid = proc.pid
+            pr = psutil.Process( pid )
+            for proc in pr.children( recursive=True ): 
+                proc.kill()
+            pr.kill()
+        except:
+            pass
+
+    
+
+    async def input_httpfile_run( self, cmd, file_path ):
+        proc = await asyncio.create_subprocess_shell(
+            cmd )
+
+        
+        
+        await asyncio.gather( self.read_file( file_path ) )
+                
+        try:
+            pid = proc.pid
+            pr = psutil.Process( pid )
+            for proc in pr.children( recursive=True ): 
+                proc.kill()
+            pr.kill()
+        except:
+            pass
+
+    async def input_httpws_run( self, cmd, url ):
+        proc = await asyncio.create_subprocess_shell(
+            cmd )
+        
+        await asyncio.gather( self.read_ws( url ) )
+                
+        try:
+            pid = proc.pid
+            pr = psutil.Process( pid )
+            for proc in pr.children( recursive=True ): 
+                proc.kill()
+            pr.kill()
+        except:
+            pass
+
+    async def input_httpnc_run( self, cmd ):
+        proc = await asyncio.create_subprocess_shell(
+            cmd,
+            stdin=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.DEVNULL )
+        
+        while not self.input_ended:
+            sleep( 0.1 )
+            
+        try:
+            pid = proc.pid
+            pr = psutil.Process( pid )
+            for proc in pr.children( recursive=True ): 
+                proc.kill()
+            pr.kill()
+        except Exception as e:
+            pass
         
     def input_http( self, data, callback=False ):
         if self.input_value_type == 'BINARY':
@@ -549,7 +640,7 @@ class APiAgent( APiBaseAgent ):
         if self.input_delimiter:
             inp = [ i for i in data.split( self.input_delimiter ) if i != '' ]
         else:
-            imp = [ data ]
+            inp = [ data ]
         for d in inp:
             url = self.http_url + d
             error = True
@@ -568,11 +659,104 @@ class APiAgent( APiBaseAgent ):
                 except Exception as e:
                     sleep( 0.2 )
             if d == self.input_end:
-                #self.input_is_done = True
                 self.service_quit( 'Received end delimiter, shutting down HTTP server!' )
                 return
 
-    def input_ws( self, data ):
+    async def input_wsstdout_run( self, cmd ):
+        proc = await asyncio.create_subprocess_shell(
+            cmd,
+            stderr=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE )
+
+        await asyncio.gather(
+            self.read_stderr( proc.stderr ),
+            self.read_stdout( proc.stdout ) )
+    
+        try:
+            pid = proc.pid
+            pr = psutil.Process( pid )
+            for proc in pr.children( recursive=True ): 
+                proc.kill()
+            pr.kill()
+        except:
+            pass
+
+
+    async def input_wsfile_run( self, cmd, file_path ):
+        proc = await asyncio.create_subprocess_shell(
+            cmd )
+
+        await asyncio.gather( self.read_file( file_path ) )
+                
+        try:
+            pid = proc.pid
+            pr = psutil.Process( pid )
+            for proc in pr.children( recursive=True ): 
+                proc.kill()
+            pr.kill()
+        except:
+            pass
+
+    async def input_wshttp_run( self, cmd, url ):
+        proc = await asyncio.create_subprocess_shell(
+            cmd,
+            stdin=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.DEVNULL )
+
+        await asyncio.gather( self.read_url( url ) )
+
+        try:
+            pid = proc.pid
+            pr = psutil.Process( pid )
+            for proc in pr.children( recursive=True ): 
+                proc.kill()
+            pr.kill()
+        except:
+            pass
+
+    async def input_wsws_run( self, cmd, url ):
+        proc = await asyncio.create_subprocess_shell(
+            cmd,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL )
+
+        
+        while not self.input_ended:
+            sleep( 0.1 )
+        
+        await asyncio.gather(
+            self.read_ws( url ) )
+        
+        try:
+            pid = proc.pid
+            pr = psutil.Process( pid )
+            for proc in pr.children( recursive=True ): 
+                proc.kill()
+            pr.kill()
+        except:
+            pass
+
+    async def input_wsnc_run( self, cmd ):
+        proc = await asyncio.create_subprocess_shell(
+            cmd,
+            stdin=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.DEVNULL )
+        
+        while not self.input_ended:
+            sleep( 0.1 )
+            
+        try:
+            pid = proc.pid
+            pr = psutil.Process( pid )
+            for proc in pr.children( recursive=True ): 
+                proc.kill()
+            pr.kill()
+        except Exception as e:
+            pass
+        
+    def input_ws( self, data, callback=False ):
         if self.input_value_type == 'BINARY':
             data = data.encode( 'utf-8' )
         if self.input_delimiter:
@@ -580,19 +764,25 @@ class APiAgent( APiBaseAgent ):
         else:
             imp = [ data ]
         for i in inp:
+            asyncio.get_event_loop().run_until_complete( self.ws( i, callback ) )
             if i == self.input_end:
                 self.service_quit( 'Received end delimiter, shutting down WebSocket server!' )
                 return
-            asyncio.get_event_loop().run_until_complete( self.ws( i ) )
         
-    async def ws( self, msg ):
+    async def ws( self, msg, callback=False ):
         error = True
         while error:
             try:
                 async with websockets.connect( self.ws_url ) as websocket:
                     await websocket.send( msg )
                     resp = await websocket.recv()
-                    self.output_callback( resp )
+                    if callback:
+                        if self.output_delimiter:
+                            resp = [ i for i in resp.split( self.output_delimiter ) if i ]
+                        else:
+                            resp = [ resp ]
+                        for i in resp:
+                            self.output_callback( i )
                     error = False
             except Exception as e:
                 sleep( 0.2 )
@@ -625,6 +815,8 @@ class APiAgent( APiBaseAgent ):
     def service_quit( self, msg ):
         sleep( 0.5 )
         self.say( msg ) # firstly need to clean up and finish all threads
+        self.input_ended = True
+        sleep( 0.5 )
         try:
             if self.stdinout_thread:
                 self.stdinout_thread.join()
@@ -654,6 +846,40 @@ class APiAgent( APiBaseAgent ):
                 self.nc_output_thread.join()
             if self.httpstdout_thread:
                 self.httpstdout_thread.join()
+            if self.httpfile_thread:
+                self.httpfile_thread.join()
+            if self.httphttp_thread:
+                self.httphttp_thread.join()
+            if self.httpws_thread:
+                self.httpws_thread.join()
+            if self.httpnc_thread:
+                self.httpnc_thread.join()
+            if self.httpncrec_thread:
+                self.httpncrec_thread.join()
+            if self.wsstdout_thread:
+                self.wsstdout_thread.join()
+            if self.wsfile_thread:
+                self.wsfile_thread.join()
+            if self.wshttp_thread:
+                self.wshttp_thread.join()
+            if self.wsws_thread:
+                self.wsws_thread.join()
+            if self.wsnc_thread:
+                self.wsnc_thread.join()
+            if self.wsncrec_thread:
+                self.wsncrec_thread.join()
+            if self.ncstdout_thread:
+                self.ncstdout_thread.join()
+            if self.ncfile_thread:
+                self.ncfile_thread.join()
+            if self.nchttp_thread:
+                self.nchttp_thread.join()
+            if self.ncws_thread:
+                self.ncws_thread.join()
+            if self.ncnc_thread:
+                self.ncnc_thread.join()
+            if self.ncncrec_thread:
+                self.ncncrec_thread.join()
         except Exception as e:
             pass
 
@@ -837,35 +1063,124 @@ class APiAgent( APiBaseAgent ):
         elif self.input_type[ :4 ] == 'HTTP' and self.output_type in ( 'STDOUT', 'STDERR' ):
             url = http_re.findall( self.input_type )[ 0 ]
             self.http_url = url
-            self.input = self.input_http #lambda data: Thread( target=self.input_http, args=( data, ) ).start()
-            #self.input_is_done = False
-
+            self.input = self.input_http 
             self.httpstdout_thread = Thread( target=asyncio.run, args=( self.input_httpstdout_run( self.cmd ),  ) )
             self.httpstdout_thread.start()
-            #cmd = shlex.split( self.cmd )
-            #self.http_proc = sp.Popen( cmd, stdout=sp.PIPE, stderr=sp.PIPE )
-            #self.httpstdout_thread = Thread( target=self.read_stdout_threaded, args=( self.http_proc.stdout, ) )
-            #self.httpstdout_thread.start()
             
-            # TODO: add adequate threads and finish other outputs
-        elif self.input_type[ :4 ] == 'HTTP' and self.output_type[ :4 ] == 'HTTP':
-            cmd = shlex.split( self.cmd + ' > /dev/null 2>&1 &' )
-            self.http_proc = sp.Popen( cmd, stdout=sp.DEVNULL, stderr=sp.DEVNULL )
+        elif self.input_type[ :4 ] == 'HTTP' and self.output_type[ :4 ] == 'FILE':
             url = http_re.findall( self.input_type )[ 0 ]
             self.http_url = url
+            self.input = self.input_http
+            fl = file_re.findall( self.output_type )[ 0 ]
+            self.output_file_path = fl
+
+            
+            self.httpfile_thread = Thread( target=asyncio.run, args=( self.input_httpfile_run( self.cmd, self.output_file_path ),  ) )
+            self.httpfile_thread.start()
+
+            
+        elif self.input_type[ :4 ] == 'HTTP' and self.output_type[ :4 ] == 'HTTP':
             url = http_re.findall( self.input_type )[ 0 ]
+            self.http_url = url
+            url = http_re.findall( self.output_type )[ 0 ]
             self.http_url_output = url
             if self.http_url == self.http_url_output:
+                cmd = shlex.split( self.cmd + ' > /dev/null 2>&1 &' )
+                self.http_proc = sp.Popen( cmd, stdout=sp.DEVNULL, stderr=sp.DEVNULL )
                 self.input = lambda data: self.input_http( data, callback=True )
             else:
-                # TODO implement thread
-                pass
-        elif self.input_type[ :2 ] == 'WS':
+                self.input = self.input_http
+                self.httphttp_thread = Thread( target=asyncio.run, args=( self.input_httphttp_run( self.cmd, self.http_url_output ), ) )
+                self.httphttp_thread.start()
+
+        elif self.input_type[ :4 ] == 'HTTP' and self.output_type[ :2 ] == 'WS':
+            url = http_re.findall( self.input_type )[ 0 ]
+            self.http_url = url
+            url = ws_re.findall( self.output_type )[ 0 ]
+            self.ws_output_url = url
+            self.input = self.input_http
+
+            self.httpws_thread = Thread( target=asyncio.run, args=( self.input_httpws_run( self.cmd, self.ws_output_url ), ) )
+            self.httpws_thread.start()
+
+        
+        elif self.input_type[ :4 ] == 'HTTP' and self.output_type[ :6 ] == 'NETCAT':
+            url = http_re.findall( self.input_type )[ 0 ]
+            self.http_url = url
+            host, port, udp = netcat_re.findall( self.output_type )[ 0 ]
+            self.nc_host = host
+            self.nc_port = int( port )
+            self.nc_udp = udp != ''
+            self.input = self.input_http
+
+            
+            self.httpnc_thread = Thread( target=asyncio.run, args=( self.input_httpnc_run( self.cmd ), ) )
+            self.httpnc_thread.start()
+            self.httpncrec_thread = Thread( target=self.read_nc, args=( self.nc_host, self.nc_port, self.nc_udp ) )
+            self.httpncrec_thread.start() 
+        
+        elif self.input_type[ :2 ] == 'WS' and self.output_type in ( 'STDOUT', 'STDERR' ):
             url = ws_re.findall( self.input_type )[ 0 ]
-            cmd = shlex.split( self.cmd + ' > /dev/null 2>&1 &' )
-            self.ws_proc = sp.Popen( cmd, stdout=sp.DEVNULL, stderr=sp.DEVNULL )
             self.ws_url = url
             self.input = self.input_ws
+            
+            self.wsstdout_thread = Thread( target=asyncio.run, args=( self.input_wsstdout_run( self.cmd ), ) )
+            self.wsstdout_thread.start()
+        
+        elif self.input_type[ :2 ] == 'WS' and self.output_type[ :4 ] == 'FILE':
+            url = ws_re.findall( self.input_type )[ 0 ]
+            self.ws_url = url
+            self.input = self.input_ws
+            fl = file_re.findall( self.output_type )[ 0 ]
+            self.output_file_path = fl
+
+            
+            self.wsfile_thread = Thread( target=asyncio.run, args=( self.input_wsfile_run( self.cmd, self.output_file_path ),  ) )
+            self.wsfile_thread.start()
+        
+        elif self.input_type[ :2 ] == 'WS' and self.output_type[ :4 ] == 'HTTP':
+            url = ws_re.findall( self.input_type )[ 0 ]
+            self.ws_url = url
+            self.input = self.input_ws
+            url = http_re.findall( self.output_type )[ 0 ]
+            self.output_url = url
+            
+            self.wshttp_thread = Thread( target=asyncio.run, args=( self.input_wshttp_run( self.cmd, self.output_url ), ) )
+            self.wshttp_thread.start()
+            
+        
+        elif self.input_type[ :2 ] == 'WS' and self.output_type[ :2 ] == 'WS':
+            url = ws_re.findall( self.input_type )[ 0 ]
+            self.ws_url = url
+            self.input = self.input_ws
+            url = ws_re.findall( self.output_type )[ 0 ]
+            self.ws_output_url = url
+            if self.ws_url == self.ws_output_url:
+                cmd = shlex.split( self.cmd + ' > /dev/null 2>&1 &' )
+                self.ws_proc = sp.Popen( cmd, stdout=sp.DEVNULL, stderr=sp.DEVNULL )
+                self.input = lambda data: self.input_ws( data, callback=True )
+            else:
+                self.input = self.input_ws
+                self.wsws_thread = Thread( target=asyncio.run, args=( self.input_wsws_run( self.cmd, self.ws_output_url ), ) )
+                self.wsws_thread.start()
+            
+        
+        elif self.input_type[ :2 ] == 'WS' and self.output_type[ :6 ] == 'NETCAT':
+            url = ws_re.findall( self.input_type )[ 0 ]
+            self.ws_url = url
+            self.input = self.input_ws
+            host, port, udp = netcat_re.findall( self.output_type )[ 0 ]
+            self.nc_host = host
+            self.nc_port = int( port )
+            self.nc_udp = udp != ''
+
+            
+            self.wsnc_thread = Thread( target=asyncio.run, args=( self.input_wsnc_run( self.cmd ), ) )
+            self.wsnc_thread.start()
+            self.wsncrec_thread = Thread( target=self.read_nc, args=( self.nc_host, self.nc_port, self.nc_udp ) )
+            self.wsncrec_thread.start()
+            
+            # TODO: add adequate threads and finish other outputs
         elif self.input_type[ :6 ] == 'NETCAT':
             host, port, udp = netcat_re.findall( self.input_type )[ 0 ]
             self.nc_host = host
@@ -1225,7 +1540,7 @@ if __name__ == '__main__':
     '''rs = APiRegistrationService( 'APi-test' )
     rs.register( 'ivek' )'''
 
-    a = APiAgent( 'bla_http_http', 'bla0agent@dragon.foi.hr', 'tajna', flows=[ (1, 2), (3, 4), (1, 5), (3, 6), (1, 3, 5, 7) ] )
+    a = APiAgent( 'bla_ws_nc', 'bla0agent@dragon.foi.hr', 'tajna', flows=[ (1, 2), (3, 4), (1, 5), (3, 6), (1, 3, 5, 7) ] )
 
     sleep( 1 )
     a.input( 'avauhu\nguhu\nbuhu\nwuhu\ncuhu\n' )
