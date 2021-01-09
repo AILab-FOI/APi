@@ -17,6 +17,8 @@ import tempfile
 import threading
 from threading import Thread
 
+# RegEx for parsing agent definition files
+
 file_re = re.compile( r'FILE (.*)' )
 http_re = re.compile( r'HTTP (.*)' )
 ws_re  = re.compile( r'WS (.*)' )
@@ -27,7 +29,11 @@ time_re = re.compile( r'TIME ([0-9.]+)' )
 size_re = re.compile( r'SIZE ([0-9]+)' )
 regex_re = re.compile( r'REGEX .*' )
 
+# Not implemented error message
+
 NIE = 'Sorry, it is planned, I promise ;-)'
+
+# Temporary folder path
 
 TMP_FOLDER = '/tmp/APi/'
 
@@ -56,6 +62,8 @@ import aiofiles
 import aiohttp
 import websockets
 import nclib
+
+from pyxf.pyxf import swipl
 
 def error( *msg ):
     '''Function for printing error messages'''
@@ -112,10 +120,24 @@ class APiChannel( APiBaseAgent ):
         super().__init__( name, password )
         self.inputs = inputs
         self.outputs = outputs
+        self.kb = swipl()
+
+    def map( self, data ):
+        pass
 
 class APiAgent( APiBaseAgent ):
     '''Service wrapper agent.'''
+
+    # TODO: Sort methods / coroutines by type
     def __init__( self, agentname, name, password, args=[], flows=[] ):
+        '''
+        Constructor.
+        agentname - name as in agent definition (.ad) file.
+        name - XMPP/Jabber username
+        password - XMPP/Jabber password
+        args - list of arguments (from APi statement)
+        flows - list of message flows (from APi statement)
+        '''
         try:
             fh = open( agentname + '.ad' )
         except IOError as e:
@@ -138,6 +160,10 @@ class APiAgent( APiBaseAgent ):
         self.output_channels = set( i[ 1 ] for i in flows )
 
     def _load( self, fh ):
+        '''
+        Agent definition file (.ad) loader.
+        fh - open agent definition file handle
+        '''
         try:
             self.descriptor = load( fh.read(), Loader )
         except Exception as e:
@@ -166,7 +192,7 @@ class APiAgent( APiBaseAgent ):
             raise APiAgentDefinitionError( err )
 
         if self.type == 'unix':
-            # only for testing, need to filter by agent definition (e.g. data-type, fmt etc)
+            # Initialize attributes to be used later
             self.cmd = self.descriptor[ 'agent' ][ 'start' ]
             self.input_file_path = None
             self.input_delimiter = None
@@ -228,54 +254,13 @@ class APiAgent( APiBaseAgent ):
             raise APiAgentDefinitionError( err )
             
         
-        self.say( self.descriptor )
-
-    def input_file( self, data ):
-        if self.input_file_written:
-            err = 'Agent %s cannot write multiple times to input file "%s".' % ( self.name, self.input_file_path )
-            raise APiCommunicationError( err )
-        if self.input_value_type == 'BINARY':
-            data = data.encode( 'utf-8' )
-        fh = open( self.input_file_path, 'w' )
-        fh.write( data )
-        fh.close()
-        self.input_file_written = True
-        # TODO: This needs to be synchronized with
-        # processes reading the file (i.e. the process
-        # should not start until the file has been
-        # written. Also the service should not stop
-        # until the process has read the file.
-        self.service_quit( 'Input file written, quitting!' )
-
-
-    async def input_file_run( self, cmd ):
-        proc = await asyncio.create_subprocess_shell(
-            cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE )
-
-        await asyncio.gather(
-            self.read_stderr( proc.stderr ),
-            self.read_stdout( proc.stdout ) )
-
-
-
-    def input_stdin( self, data ):
-        if self.input_value_type == 'BINARY':
-            data = data.encode( 'utf-8' )
-
-        if self.input_delimiter:
-            inp = [ i for i in data.split( self.input_delimiter ) if i ]
-        else:
-            inp = [ data ]
-            
-        self.BUFFER.extend( inp )
-
-        if data == self.input_end:
-            self.service_quit( 'Got end delimiter on STDIN, quitting!' )
-        
+        #self.say( self.descriptor )
 
     async def read_stdout( self, stdout ):
+        '''
+        Coroutine reading STDOUT and calling callback method.
+        stdout - STDOUT file handle
+        '''
         while True:
             buf =  await stdout.readline() 
             if not buf:
@@ -286,6 +271,10 @@ class APiAgent( APiBaseAgent ):
 
 
     async def read_stderr( self, stderr ):
+        '''
+        Coroutine reading STDERR and calling callback method.
+        stderr - STDERR file handle
+        '''
         while True:
             buf = await stderr.readline()
             if not buf:
@@ -296,6 +285,10 @@ class APiAgent( APiBaseAgent ):
 
     
     async def read_file( self, file_path ):
+        '''
+        Coroutine reading file and calling callback method.
+        file_path - file path to be read from
+        '''
         file_empty = True
         while file_empty:
             async with aiofiles.open( file_path, mode='r' ) as f:
@@ -305,6 +298,10 @@ class APiAgent( APiBaseAgent ):
             await asyncio.sleep( 0.1 )
 
     async def read_url( self, url ):
+        '''
+        Coroutine reading URL and calling callback method.
+        url - URL to be read from
+        '''
         not_available = True
         while not_available:
             try:
@@ -322,6 +319,10 @@ class APiAgent( APiBaseAgent ):
                 await asyncio.sleep( 0.2 )
 
     async def read_ws( self, url ):
+        '''
+        Coroutine reading WebSocket and calling callback method.
+        url - WS URL to be read from
+        '''
         error = True
         not_timeout = True
         while error:
@@ -350,6 +351,12 @@ class APiAgent( APiBaseAgent ):
 
 
     def read_nc( self, host, port, udp=False ):
+        '''
+        Method reading from NETCAT socket and calling callback method.
+        host - host
+        port - port
+        udp=False - should NETCAT use UDP (if false, default is TCP)
+        '''
         not_available = True
         while not_available:
             try:
@@ -378,6 +385,10 @@ class APiAgent( APiBaseAgent ):
                 error = True
                 
     async def write_stdin( self, stdin ):
+        '''
+        Coroutine writing to STDIN
+        stdin - STDIN file handle
+        '''
         send = True
         while send:
             if not self.BUFFER:
@@ -398,6 +409,66 @@ class APiAgent( APiBaseAgent ):
                         break
         stdin.close()
 
+        
+    def input_file( self, data ):
+        '''
+        File input method
+        data - data to be written to file
+        '''
+        if self.input_file_written:
+            err = 'Agent %s cannot write multiple times to input file "%s".' % ( self.name, self.input_file_path )
+            raise APiCommunicationError( err )
+        if self.input_value_type == 'BINARY':
+            data = data.encode( 'utf-8' )
+        fh = open( self.input_file_path, 'w' )
+        fh.write( data )
+        fh.close()
+        self.input_file_written = True
+        # TODO: This needs to be synchronized with
+        # processes reading the file (i.e. the process
+        # should not start until the file has been
+        # written. Also the service should not stop
+        # until the process has read the file.
+        self.service_quit( 'Input file written, quitting!' )
+
+    
+
+    async def input_file_run( self, cmd ):
+        '''
+        File to STDOUT/STDERR coroutine
+        cmd - command to be started as service
+        '''
+        proc = await asyncio.create_subprocess_shell(
+            cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE )
+
+        await asyncio.gather(
+            self.read_stderr( proc.stderr ),
+            self.read_stdout( proc.stdout ) )
+
+
+
+    def input_stdin( self, data ):
+        '''
+        STDIN input method
+        data - data to be written to STDIN
+        '''
+        if self.input_value_type == 'BINARY':
+            data = data.encode( 'utf-8' )
+
+        if self.input_delimiter:
+            inp = [ i for i in data.split( self.input_delimiter ) if i ]
+        else:
+            inp = [ data ]
+            
+        self.BUFFER.extend( inp )
+
+        if data == self.input_end:
+            self.service_quit( 'Got end delimiter on STDIN, quitting!' )
+        
+
+    
     async def input_stdin_run( self, cmd ):
         proc = await asyncio.create_subprocess_shell(
             cmd,
@@ -908,10 +979,20 @@ class APiAgent( APiBaseAgent ):
                 return None
 
     def output_callback( self, data ):
+        '''
+        Output callback method.
+        data - data read from service.
+        '''
         self.say( 'I just received:', data )
         # TODO: connect this to output channels
 
-    def service_quit( self, msg ):
+    def service_quit( self, msg='' ):
+        '''
+        Service quitting and clean up method. Joins all threads and
+        kills all running processes (services).
+
+        msg - optional message (more or less for debug purposes)
+        '''
         sleep( 0.5 )
         self.say( msg ) # firstly need to clean up and finish all threads
         self.input_ended = True
@@ -1000,6 +1081,21 @@ class APiAgent( APiBaseAgent ):
         self.nc_output_thread_flag = False
         
     def process_descriptor( self ):
+        '''
+        Agent descriptor processor (the heart of the agent). Processes
+        the agent description (as loaded with self._load) and connects
+        inputs to outputs for various types of communication channels
+        (STDIN/STDOUT/STDERR, files, HTTP, WebSocket, Netcat). It also
+        starts the defined services (subprocesses) and needed threads 
+        and/or coroutines to handle and connect inputs to outputs.
+        The basic rule is that the START value from the agent description
+        file (.ad) is started as a subprocess (the microservice), input
+        is written to the input as specified by the agent description 
+        file and output is read from the output also specified in the 
+        same file. The output threads / coroutines call the output_callback
+        method to handle to output in a desired manner (i.e. forward it
+        to a given output channel of the agent).
+        '''
         if self.input_data_type == 'ONEVALUE':
             pass
         elif self.input_data_type == 'STREAM':
@@ -1405,11 +1501,7 @@ class APiAgent( APiBaseAgent ):
                 self.ncncrec_thread = Thread( target=self.read_nc, args=( self.nc_host_output, self.nc_port_output, self.nc_udp_output ) )
                 self.ncncrec_thread.start()
 
-            
-            
-
-            
-            
+                
         else:
             err = 'Invalid input type "%s"\n' % self.input_type
             raise APiAgentDefinitionError( err )
@@ -1743,12 +1835,8 @@ def initialize():
 if __name__ == '__main__':
     initialize()
     ns = APiNamespace()
-    '''
-    try:
-        a = APiAgent( 'bla0', 'bla0agent@dragon.foi.hr', 'tajna', flows=[ (1, 2), (3, 4), (1, 5), (3, 6), (1, 3, 5, 7) ] )
-    except Exception as e:
-        error( e )
-    '''
+
+    # TESTING
     os.chdir('test')
     '''rs = APiRegistrationService( 'APi-test' )
     rs.register( 'ivek' )'''
