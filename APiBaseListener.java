@@ -135,6 +135,18 @@ public class APiBaseListener implements APiListener {
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
+	@Override public void enterS_channel_transformer(APiParser.S_channel_transformerContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitS_channel_transformer(APiParser.S_channel_transformerContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
 	@Override public void enterS_channel_spec(APiParser.S_channel_specContext ctx) { }
 	/**
 	 * {@inheritDoc}

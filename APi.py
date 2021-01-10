@@ -14,6 +14,7 @@ import shlex
 import psutil
 import re
 import tempfile
+import random
 import threading
 from threading import Thread
 
@@ -60,6 +61,8 @@ import requests
 import asyncio
 import aiofiles
 import aiohttp
+import logging
+logging.getLogger( 'asyncio' ).setLevel( logging.CRITICAL )
 import websockets
 import nclib
 
@@ -103,7 +106,7 @@ class XMPPRegisterException( Exception ):
     '''Exception thrown when the system cannot register at a XMPP registration service'''
     pass
 
-class APiBaseAgent( Agent ):
+class APiTalkingAgent( Agent ):
     '''
     Base agent (auxilliary methods and behaviours for all other
     types of agents
@@ -113,149 +116,12 @@ class APiBaseAgent( Agent ):
 
     # Add stopping behaviour on message
 
-class APiChannel( APiBaseAgent ):
-    '''Channel agent.'''
-    def __init__( self, channelname, name, password, inputs, outputs ):
-        self.channelname = channelname
-        super().__init__( name, password )
-        self.inputs = inputs
-        self.outputs = outputs
-        self.kb = swipl()
-
-    def map( self, data ):
-        pass
-
-class APiAgent( APiBaseAgent ):
-    '''Service wrapper agent.'''
-
-    # TODO: Sort methods / coroutines by type
-    def __init__( self, agentname, name, password, args=[], flows=[] ):
-        '''
-        Constructor.
-        agentname - name as in agent definition (.ad) file.
-        name - XMPP/Jabber username
-        password - XMPP/Jabber password
-        args - list of arguments (from APi statement)
-        flows - list of message flows (from APi statement)
-        '''
-        try:
-            fh = open( agentname + '.ad' )
-        except IOError as e:
-            err = 'Missing agent definition file or permission issue.\n' + str( e )
-            raise APiIOError( err )
-        super().__init__( name, password )
-        self.agentname = agentname
-        self._load( fh )
-        self.agentargs = args
-
-        self.flows = []
-        for f in flows:
-            if len( f ) > 2:
-                pairs = [ i for i in pairwise( f ) ]
-                self.flows.extend( pairs )
-            else:
-                self.flows.append( f )
-        
-        self.input_channels = set( i[ 0 ] for i in flows )
-        self.output_channels = set( i[ 1 ] for i in flows )
-
-    def _load( self, fh ):
-        '''
-        Agent definition file (.ad) loader.
-        fh - open agent definition file handle
-        '''
-        try:
-            self.descriptor = load( fh.read(), Loader )
-        except Exception as e:
-            err = 'Agent definition file cannot be loaded.\n' + str( e )
-            raise APiAgentDefinitionError( err )
-        if self.agentname != self.descriptor[ 'agent' ][ 'name' ]:
-            err = 'Name in agent definition file does not match file name: %s != %s !' % ( self.agentname, self.descriptor[ 'agent' ][ 'name' ] )
-            raise APiAgentDefinitionError( err )
-        try:
-            self.description = self.descriptor[ 'agent' ][ 'description' ]
-            self.type = self.descriptor[ 'agent' ][ 'type' ]
-            self.input_type = self.descriptor[ 'agent' ][ 'input' ][ 'type' ]
-            self.input_data_type = self.descriptor[ 'agent' ][ 'input' ][ 'data-type' ]
-            self.input_fmt = self.descriptor[ 'agent' ][ 'input' ][ 'fmt' ]
-            self.input_cutoff = self.descriptor[ 'agent' ][ 'input' ][ 'cutoff' ]
-            self.input_end = self.descriptor[ 'agent' ][ 'input' ][ 'end' ]
-            self.input_value_type = self.descriptor[ 'agent' ][ 'input' ][ 'value-type' ]
-            self.output_type = self.descriptor[ 'agent' ][ 'output' ][ 'type' ]
-            self.output_data_type = self.descriptor[ 'agent' ][ 'output' ][ 'data-type' ]
-            self.output_fmt = self.descriptor[ 'agent' ][ 'output' ][ 'fmt' ]
-            self.output_cutoff = self.descriptor[ 'agent' ][ 'output' ][ 'cutoff' ]
-            self.output_end = self.descriptor[ 'agent' ][ 'output' ][ 'end' ]
-            self.output_value_type = self.descriptor[ 'agent' ][ 'output' ][ 'value-type' ]
-        except Exception as e:
-            err = 'Agent definition file is invalid.\n' + str( e )
-            raise APiAgentDefinitionError( err )
-
-        if self.type == 'unix':
-            # Initialize attributes to be used later
-            self.cmd = self.descriptor[ 'agent' ][ 'start' ]
-            self.input_file_path = None
-            self.input_delimiter = None
-            self.http_proc = None
-            self.ws_proc = None
-            self.nc_proc = None
-            self.output_nc_threaded = None
-            self.nc_output_thread = None
-            self.input_ended = None
-
-            # Threads
-
-            # STDIN threads
-            self.stdinout_thread = None
-            self.stdinfile_thread = None
-            self.stdinhttp_thread = None
-            self.stdinws_thread = None
-            self.stdinnc_thread = None
-            self.stdinncrec_thread = None
-
-            # FILE threads
-            self.filestdout_thread = None
-            self.filefile_thread = None
-            self.filehttp_thread = None
-            self.filews_thread = None
-            self.filenc_thread = None
-            self.filencrec_thread = None
-
-            # HTTP threads
-            self.httpstdout_thread = None
-            self.httpfile_thread = None
-            self.httphttp_thread = None
-            self.httpws_thread = None
-            self.httpnc_thread = None
-            self.httpncrec_thread = None
-
-            # WS threads
-            self.wsstdout_thread = None
-            self.wsfile_thread = None
-            self.wshttp_thread = None
-            self.wsws_thread = None
-            self.wsnc_thread = None
-            self.wsncrec_thread = None
-            
-            try:
-                self.process_descriptor()
-            except Exception as e:
-                err = 'Agent definition file is invalid.\n' + str( e )
-                raise APiAgentDefinitionError( err )
-
-
-            
-        elif self.type == 'docker':
-            raise NotImplementedError( NIE )
-        elif self.type == 'kubernetes':
-            raise NotImplementedError( NIE )
-        else:
-            err = 'Invalid agent type: %s' % self.type
-            raise APiAgentDefinitionError( err )
-            
-        
-        #self.say( self.descriptor )
-
+class APiBaseAgent( APiTalkingAgent ):
+    '''
+    Base agent implementing all input/output mappings (e.g. STDIN/STDOUT/STDERR,
+    file, HTTP, WebSocket, Netcat). Not to be instanced by itself, but should be
+    used for inheritance.
+    '''
     async def read_stdout( self, stdout ):
         '''
         Coroutine reading STDOUT and calling callback method.
@@ -363,7 +229,6 @@ class APiAgent( APiBaseAgent ):
                 ncclient = nclib.Netcat( ( host, port ), udp=udp, raise_eof=True )
                 not_available = False
             except Exception as e:
-                print( e )
                 sleep( 0.2 )
 
         error = False
@@ -973,18 +838,13 @@ class APiAgent( APiBaseAgent ):
                             self.output_callback( j )
                     
             except Exception as e:
-                print( e )
                 self.nc_client.close()
                 self.service_quit( 'NETCAT process ended, quitting!' )
                 return None
 
     def output_callback( self, data ):
-        '''
-        Output callback method.
-        data - data read from service.
-        '''
-        self.say( 'I just received:', data )
-        # TODO: connect this to output channels
+        err = 'Trying to call output_callback directly from APiBaseAgent. This method should be overriden!'
+        raise APiCallbackException( err )
 
     def service_quit( self, msg='' ):
         '''
@@ -993,10 +853,10 @@ class APiAgent( APiBaseAgent ):
 
         msg - optional message (more or less for debug purposes)
         '''
-        sleep( 0.5 )
+        #sleep( 0.5 )
         self.say( msg ) # firstly need to clean up and finish all threads
         self.input_ended = True
-        sleep( 0.5 )
+        #sleep( 0.5 )
         try:
             if self.stdinout_thread:
                 self.stdinout_thread.join()
@@ -1510,24 +1370,184 @@ class APiAgent( APiBaseAgent ):
             err = 'Invalid input value type "%s"\n' % self.input_value_type
             raise APiAgentDefinitionError( err )
 
-    def output_nc_threaded( self ):
-        error = False
-        # TODO: if self.output_delimiter: ...
-        delimiter = '\n'
-        while not error:
-            if not self.nc_output_thread_flag:
-                return None
-            try:
-                res = self.nc_client.recv_until( self.output_delimiter, timeout=1 ).decode( 'utf-8' )
-                print( res )
-            except Exception as e:
-                print( e )
-                self.error = True
-                self.service_quit( 'NETCAT process ended, quitting!' )
-                return None
-            if res:
-                self.output_callback( res )
 
+    
+class APiChannel( APiBaseAgent ):
+    '''Channel agent.'''
+    def __init__( self, channelname, name, password, channel_input, channel_output ):
+        self.channelname = channelname
+        super().__init__( name, password )
+        self.input = channel_input
+        self.output = channel_output
+        self.kb = swipl()
+        self.input_re = re.compile( r'(?P<var>bla)' )
+
+    def io_data_type( self, io ):
+        # TODO: return io_data_type based on channel_input/output
+        # descriptor (can be NIL, VOID, STDIN, STDOUT, STDERR,
+        # JSON, XML, REGEX, TRANSFORMER)
+        # NIL -> sends stop to agent (0 process)
+        # VOID -> sends output to /dev/null
+        # STDIN -> reads input from stdin
+        # STDOUT/STDERR -> writes output to STDIN/STDERR
+        # JSON -> JSON input or output
+        # XML -> XML input or output
+        # REGEX -> Python style regex (with named groups) input
+        # TRANSFORMER -> read definition from channel description (.cd) file
+        pass
+        
+
+    def map( self, data ):
+        pass
+
+    def map_re( self, data ):
+        match = self.input_re.match( data )
+        vars = self.input_re.groupindex.keys()
+        results = []
+        for i in vars:
+            results[ i ] = match.group( i )
+        print( results )
+
+class APiAgent( APiBaseAgent ):
+    '''Service wrapper agent.'''
+
+    # TODO: Sort methods / coroutines by type
+    def __init__( self, agentname, name, password, args=[], flows=[] ):
+        '''
+        Constructor.
+        agentname - name as in agent definition (.ad) file.
+        name - XMPP/Jabber username
+        password - XMPP/Jabber password
+        args - list of arguments (from APi statement)
+        flows - list of message flows (from APi statement)
+        '''
+        try:
+            fh = open( agentname + '.ad' )
+        except IOError as e:
+            err = 'Missing agent definition file or permission issue.\n' + str( e )
+            raise APiIOError( err )
+        super().__init__( name, password )
+        self.agentname = agentname
+        self._load( fh )
+        self.agentargs = args
+
+        self.flows = []
+        for f in flows:
+            if len( f ) > 2:
+                pairs = [ i for i in pairwise( f ) ]
+                self.flows.extend( pairs )
+            else:
+                self.flows.append( f )
+        
+        self.input_channels = set( i[ 0 ] for i in flows )
+        self.output_channels = set( i[ 1 ] for i in flows )
+
+    def _load( self, fh ):
+        '''
+        Agent definition file (.ad) loader.
+        fh - open agent definition file handle
+        '''
+        try:
+            self.descriptor = load( fh.read(), Loader )
+        except Exception as e:
+            err = 'Agent definition file cannot be loaded.\n' + str( e )
+            raise APiAgentDefinitionError( err )
+        if self.agentname != self.descriptor[ 'agent' ][ 'name' ]:
+            err = 'Name in agent definition file does not match file name: %s != %s !' % ( self.agentname, self.descriptor[ 'agent' ][ 'name' ] )
+            raise APiAgentDefinitionError( err )
+        try:
+            self.description = self.descriptor[ 'agent' ][ 'description' ]
+            self.type = self.descriptor[ 'agent' ][ 'type' ]
+            self.input_type = self.descriptor[ 'agent' ][ 'input' ][ 'type' ]
+            self.input_data_type = self.descriptor[ 'agent' ][ 'input' ][ 'data-type' ]
+            self.input_fmt = self.descriptor[ 'agent' ][ 'input' ][ 'fmt' ]
+            self.input_cutoff = self.descriptor[ 'agent' ][ 'input' ][ 'cutoff' ]
+            self.input_end = self.descriptor[ 'agent' ][ 'input' ][ 'end' ]
+            self.input_value_type = self.descriptor[ 'agent' ][ 'input' ][ 'value-type' ]
+            self.output_type = self.descriptor[ 'agent' ][ 'output' ][ 'type' ]
+            self.output_data_type = self.descriptor[ 'agent' ][ 'output' ][ 'data-type' ]
+            self.output_fmt = self.descriptor[ 'agent' ][ 'output' ][ 'fmt' ]
+            self.output_cutoff = self.descriptor[ 'agent' ][ 'output' ][ 'cutoff' ]
+            self.output_end = self.descriptor[ 'agent' ][ 'output' ][ 'end' ]
+            self.output_value_type = self.descriptor[ 'agent' ][ 'output' ][ 'value-type' ]
+        except Exception as e:
+            err = 'Agent definition file is invalid.\n' + str( e )
+            raise APiAgentDefinitionError( err )
+
+        if self.type == 'unix':
+            # Initialize attributes to be used later
+            self.cmd = self.descriptor[ 'agent' ][ 'start' ]
+            self.input_file_path = None
+            self.input_delimiter = None
+            self.http_proc = None
+            self.ws_proc = None
+            self.nc_proc = None
+            self.nc_output_thread = None
+            self.input_ended = None
+
+            # Threads
+
+            # STDIN threads
+            self.stdinout_thread = None
+            self.stdinfile_thread = None
+            self.stdinhttp_thread = None
+            self.stdinws_thread = None
+            self.stdinnc_thread = None
+            self.stdinncrec_thread = None
+
+            # FILE threads
+            self.filestdout_thread = None
+            self.filefile_thread = None
+            self.filehttp_thread = None
+            self.filews_thread = None
+            self.filenc_thread = None
+            self.filencrec_thread = None
+
+            # HTTP threads
+            self.httpstdout_thread = None
+            self.httpfile_thread = None
+            self.httphttp_thread = None
+            self.httpws_thread = None
+            self.httpnc_thread = None
+            self.httpncrec_thread = None
+
+            # WS threads
+            self.wsstdout_thread = None
+            self.wsfile_thread = None
+            self.wshttp_thread = None
+            self.wsws_thread = None
+            self.wsnc_thread = None
+            self.wsncrec_thread = None
+            
+            try:
+                self.process_descriptor()
+            except Exception as e:
+                err = 'Agent definition file is invalid.\n' + str( e )
+                raise APiAgentDefinitionError( err )
+
+
+            
+        elif self.type == 'docker':
+            raise NotImplementedError( NIE )
+        elif self.type == 'kubernetes':
+            raise NotImplementedError( NIE )
+        else:
+            err = 'Invalid agent type: %s' % self.type
+            raise APiAgentDefinitionError( err )
+            
+        
+        #self.say( self.descriptor )
+
+    
+    def output_callback( self, data ):
+        '''
+        Output callback method.
+        data - data read from service.
+        '''
+        self.say( 'I just received:', data )
+        # TODO: connect this to output channels
+
+    
         
 class APiHolon( APiBaseAgent ):
     '''A holon created by another api file.'''
@@ -1790,7 +1810,8 @@ def process( stream ):
     walker = ParseTreeWalker()
     walker.walk( printer, tree )
     
-            
+
+BYE = 'Bye!'
 def main():
     if len( sys.argv ) > 2:
         print( 'Usage: APi [filename.api]' )
@@ -1805,12 +1826,12 @@ def main():
                 try:
                     command = input( "Aπ :- " )
                 except:
-                    print( '\nBye!' )
+                    print( '\n%s!' % BYE )
                     quit_spade()
                     sys.exit()
                 
                 if command == "exit":
-                    print( 'Bye!' )
+                    print( '%s!' % BYE )
                     quit_spade()
                     break
                 elif command == '':
@@ -1829,6 +1850,8 @@ def main():
                     process( stream )
 
 def initialize():
+    global BYE
+    BYE = random.choice( [ i.strip().title() for i in open( 'bye.txt' ).readlines() ][ 1: ] )
     if not os.path.exists( TMP_FOLDER ):
         os.makedirs( TMP_FOLDER )
                     

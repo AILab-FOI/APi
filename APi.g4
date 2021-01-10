@@ -2,7 +2,7 @@ grammar APi ;
 
 import JSON ;
 
-api_program : ( s_import | s_environment | s_channel | s_agent | s_start | COMMENT | NEWLINE )*? ;
+api_program : ( s_import | s_environment | s_channel | s_channel_transformer | s_agent | s_start | COMMENT | NEWLINE )*? ;
 
 s_environment : ENVIRONMENT ':' NEWLINE ioflow+ ;
 
@@ -26,7 +26,9 @@ flow : TAB valid_channel SENDS valid_channel ( SENDS valid_channel )* NEWLINE ;
 
 valid_channel : IDENT | SELF | NIL | STDIN | STDOUT | STDERR | VOID ;
 
-s_channel : CHANNEL IDENT ':' NEWLINE s_channel_spec;
+s_channel : CHANNEL IDENT ':' NEWLINE s_channel_spec ;
+
+s_channel_transformer : CHANNEL IDENT '.' NEWLINE ;
 
 s_channel_spec : TAB json SENDS json NEWLINE;
 

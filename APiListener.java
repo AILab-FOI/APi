@@ -107,6 +107,16 @@ public interface APiListener extends ParseTreeListener {
 	 */
 	void exitS_channel(APiParser.S_channelContext ctx);
 	/**
+	 * Enter a parse tree produced by {@link APiParser#s_channel_transformer}.
+	 * @param ctx the parse tree
+	 */
+	void enterS_channel_transformer(APiParser.S_channel_transformerContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link APiParser#s_channel_transformer}.
+	 * @param ctx the parse tree
+	 */
+	void exitS_channel_transformer(APiParser.S_channel_transformerContext ctx);
+	/**
 	 * Enter a parse tree produced by {@link APiParser#s_channel_spec}.
 	 * @param ctx the parse tree
 	 */
