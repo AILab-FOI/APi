@@ -98,6 +98,15 @@ class APiListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by APiParser#s_channel_transformer.
+    def enterS_channel_transformer(self, ctx:APiParser.S_channel_transformerContext):
+        pass
+
+    # Exit a parse tree produced by APiParser#s_channel_transformer.
+    def exitS_channel_transformer(self, ctx:APiParser.S_channel_transformerContext):
+        pass
+
+
     # Enter a parse tree produced by APiParser#s_channel_spec.
     def enterS_channel_spec(self, ctx:APiParser.S_channel_specContext):
         pass
@@ -113,6 +122,51 @@ class APiListener(ParseTreeListener):
 
     # Exit a parse tree produced by APiParser#s_import.
     def exitS_import(self, ctx:APiParser.S_importContext):
+        pass
+
+
+    # Enter a parse tree produced by APiParser#s_input.
+    def enterS_input(self, ctx:APiParser.S_inputContext):
+        pass
+
+    # Exit a parse tree produced by APiParser#s_input.
+    def exitS_input(self, ctx:APiParser.S_inputContext):
+        pass
+
+
+    # Enter a parse tree produced by APiParser#s_output.
+    def enterS_output(self, ctx:APiParser.S_outputContext):
+        pass
+
+    # Exit a parse tree produced by APiParser#s_output.
+    def exitS_output(self, ctx:APiParser.S_outputContext):
+        pass
+
+
+    # Enter a parse tree produced by APiParser#s_xml.
+    def enterS_xml(self, ctx:APiParser.S_xmlContext):
+        pass
+
+    # Exit a parse tree produced by APiParser#s_xml.
+    def exitS_xml(self, ctx:APiParser.S_xmlContext):
+        pass
+
+
+    # Enter a parse tree produced by APiParser#s_json.
+    def enterS_json(self, ctx:APiParser.S_jsonContext):
+        pass
+
+    # Exit a parse tree produced by APiParser#s_json.
+    def exitS_json(self, ctx:APiParser.S_jsonContext):
+        pass
+
+
+    # Enter a parse tree produced by APiParser#s_regex.
+    def enterS_regex(self, ctx:APiParser.S_regexContext):
+        pass
+
+    # Exit a parse tree produced by APiParser#s_regex.
+    def exitS_regex(self, ctx:APiParser.S_regexContext):
         pass
 
 
@@ -158,6 +212,87 @@ class APiListener(ParseTreeListener):
 
     # Exit a parse tree produced by APiParser#value.
     def exitValue(self, ctx:APiParser.ValueContext):
+        pass
+
+
+    # Enter a parse tree produced by APiParser#xml.
+    def enterXml(self, ctx:APiParser.XmlContext):
+        pass
+
+    # Exit a parse tree produced by APiParser#xml.
+    def exitXml(self, ctx:APiParser.XmlContext):
+        pass
+
+
+    # Enter a parse tree produced by APiParser#prolog.
+    def enterProlog(self, ctx:APiParser.PrologContext):
+        pass
+
+    # Exit a parse tree produced by APiParser#prolog.
+    def exitProlog(self, ctx:APiParser.PrologContext):
+        pass
+
+
+    # Enter a parse tree produced by APiParser#content.
+    def enterContent(self, ctx:APiParser.ContentContext):
+        pass
+
+    # Exit a parse tree produced by APiParser#content.
+    def exitContent(self, ctx:APiParser.ContentContext):
+        pass
+
+
+    # Enter a parse tree produced by APiParser#element.
+    def enterElement(self, ctx:APiParser.ElementContext):
+        pass
+
+    # Exit a parse tree produced by APiParser#element.
+    def exitElement(self, ctx:APiParser.ElementContext):
+        pass
+
+
+    # Enter a parse tree produced by APiParser#var_or_ident.
+    def enterVar_or_ident(self, ctx:APiParser.Var_or_identContext):
+        pass
+
+    # Exit a parse tree produced by APiParser#var_or_ident.
+    def exitVar_or_ident(self, ctx:APiParser.Var_or_identContext):
+        pass
+
+
+    # Enter a parse tree produced by APiParser#reference.
+    def enterReference(self, ctx:APiParser.ReferenceContext):
+        pass
+
+    # Exit a parse tree produced by APiParser#reference.
+    def exitReference(self, ctx:APiParser.ReferenceContext):
+        pass
+
+
+    # Enter a parse tree produced by APiParser#attribute.
+    def enterAttribute(self, ctx:APiParser.AttributeContext):
+        pass
+
+    # Exit a parse tree produced by APiParser#attribute.
+    def exitAttribute(self, ctx:APiParser.AttributeContext):
+        pass
+
+
+    # Enter a parse tree produced by APiParser#chardata.
+    def enterChardata(self, ctx:APiParser.ChardataContext):
+        pass
+
+    # Exit a parse tree produced by APiParser#chardata.
+    def exitChardata(self, ctx:APiParser.ChardataContext):
+        pass
+
+
+    # Enter a parse tree produced by APiParser#misc.
+    def enterMisc(self, ctx:APiParser.MiscContext):
+        pass
+
+    # Exit a parse tree produced by APiParser#misc.
+    def exitMisc(self, ctx:APiParser.MiscContext):
         pass
 
 

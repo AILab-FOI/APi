@@ -11,6 +11,18 @@ channel juhu :
 	{ ?yaaa : "123.321", '1':{ 'a':2 } } -> { 'var' : ?yaaa }
 
 
+channel external.
+
+channel regexx :
+	regex '(?P<bla>ggu)' -> json { 'var' : ?x }
+
+channel lxml :
+	xml <proba x="3">a</proba> -> json { 'var' : ?x }
+
+channel xmlvar :
+	xml <proba ?x="3" y=?zaaa>3aanna 4banana ?gaga 5huhu đšćč 7876ashbdukh<?a /></proba> -> json { 'var' : ?x }
+
+
 // definicija agenta
 agent a ( x y z ) :
 	x -> self -> z

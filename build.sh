@@ -14,7 +14,7 @@ case $1 in
 	grun APi api_program -tokens
     ;;
     -py|--python)
-	antlr -Dlanguage=Python3 APi.g4
+	antlr4 -Dlanguage=Python3 APi.g4
     ;;
     -r|--run)
 	chmod +x APi.py

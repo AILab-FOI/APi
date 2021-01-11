@@ -137,6 +137,56 @@ public interface APiListener extends ParseTreeListener {
 	 */
 	void exitS_import(APiParser.S_importContext ctx);
 	/**
+	 * Enter a parse tree produced by {@link APiParser#s_input}.
+	 * @param ctx the parse tree
+	 */
+	void enterS_input(APiParser.S_inputContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link APiParser#s_input}.
+	 * @param ctx the parse tree
+	 */
+	void exitS_input(APiParser.S_inputContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link APiParser#s_output}.
+	 * @param ctx the parse tree
+	 */
+	void enterS_output(APiParser.S_outputContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link APiParser#s_output}.
+	 * @param ctx the parse tree
+	 */
+	void exitS_output(APiParser.S_outputContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link APiParser#s_xml}.
+	 * @param ctx the parse tree
+	 */
+	void enterS_xml(APiParser.S_xmlContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link APiParser#s_xml}.
+	 * @param ctx the parse tree
+	 */
+	void exitS_xml(APiParser.S_xmlContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link APiParser#s_json}.
+	 * @param ctx the parse tree
+	 */
+	void enterS_json(APiParser.S_jsonContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link APiParser#s_json}.
+	 * @param ctx the parse tree
+	 */
+	void exitS_json(APiParser.S_jsonContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link APiParser#s_regex}.
+	 * @param ctx the parse tree
+	 */
+	void enterS_regex(APiParser.S_regexContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link APiParser#s_regex}.
+	 * @param ctx the parse tree
+	 */
+	void exitS_regex(APiParser.S_regexContext ctx);
+	/**
 	 * Enter a parse tree produced by {@link APiParser#json}.
 	 * @param ctx the parse tree
 	 */
@@ -186,4 +236,94 @@ public interface APiListener extends ParseTreeListener {
 	 * @param ctx the parse tree
 	 */
 	void exitValue(APiParser.ValueContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link APiParser#xml}.
+	 * @param ctx the parse tree
+	 */
+	void enterXml(APiParser.XmlContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link APiParser#xml}.
+	 * @param ctx the parse tree
+	 */
+	void exitXml(APiParser.XmlContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link APiParser#prolog}.
+	 * @param ctx the parse tree
+	 */
+	void enterProlog(APiParser.PrologContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link APiParser#prolog}.
+	 * @param ctx the parse tree
+	 */
+	void exitProlog(APiParser.PrologContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link APiParser#content}.
+	 * @param ctx the parse tree
+	 */
+	void enterContent(APiParser.ContentContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link APiParser#content}.
+	 * @param ctx the parse tree
+	 */
+	void exitContent(APiParser.ContentContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link APiParser#element}.
+	 * @param ctx the parse tree
+	 */
+	void enterElement(APiParser.ElementContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link APiParser#element}.
+	 * @param ctx the parse tree
+	 */
+	void exitElement(APiParser.ElementContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link APiParser#var_or_ident}.
+	 * @param ctx the parse tree
+	 */
+	void enterVar_or_ident(APiParser.Var_or_identContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link APiParser#var_or_ident}.
+	 * @param ctx the parse tree
+	 */
+	void exitVar_or_ident(APiParser.Var_or_identContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link APiParser#reference}.
+	 * @param ctx the parse tree
+	 */
+	void enterReference(APiParser.ReferenceContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link APiParser#reference}.
+	 * @param ctx the parse tree
+	 */
+	void exitReference(APiParser.ReferenceContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link APiParser#attribute}.
+	 * @param ctx the parse tree
+	 */
+	void enterAttribute(APiParser.AttributeContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link APiParser#attribute}.
+	 * @param ctx the parse tree
+	 */
+	void exitAttribute(APiParser.AttributeContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link APiParser#chardata}.
+	 * @param ctx the parse tree
+	 */
+	void enterChardata(APiParser.ChardataContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link APiParser#chardata}.
+	 * @param ctx the parse tree
+	 */
+	void exitChardata(APiParser.ChardataContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link APiParser#misc}.
+	 * @param ctx the parse tree
+	 */
+	void enterMisc(APiParser.MiscContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link APiParser#misc}.
+	 * @param ctx the parse tree
+	 */
+	void exitMisc(APiParser.MiscContext ctx);
 }
