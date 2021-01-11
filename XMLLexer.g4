@@ -94,7 +94,7 @@ IDENT   : NameStartChar1 NameChar1* ; //[a-zA-Z_] [a-zA-Z0-9]*;
 
 fragment
 NameChar1    :   NameStartChar1
-            |   '-' | '_' | '.' | INT
+            |   '-' | '_' | INT
             |   '\u00B7'
             |   '\u0300'..'\u036F'
             |   '\u203F'..'\u2040'
@@ -102,7 +102,7 @@ NameChar1    :   NameStartChar1
 
 fragment
 NameStartChar1
-            :   [:a-zA-Z]
+            :   [a-zA-Z]
             |   '\u2070'..'\u218F'
             |   '\u2C00'..'\u2FEF'
             |   '\u3001'..'\uD7FF'

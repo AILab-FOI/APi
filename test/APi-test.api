@@ -5,10 +5,10 @@ import ivek
 
 // definicija kanala
 channel bla :
-	{ ?x : 123.321, '1':2 } -> { 'var' : ?x }
+	json { ?x : 123.321, '1':2 } -> json { 'var' : ?x }
 
 channel juhu :
-	{ ?yaaa : "123.321", '1':{ 'a':2 } } -> { 'var' : ?yaaa }
+	json { ?yaaa : "123.321", '1':{ 'a': 2 } } -> json { 'var' : ?yaaa }
 
 
 channel external.
@@ -50,8 +50,8 @@ start a & b
 // komunikacija s okružjem (drugim holonima ili game engine-ovima)
 
 environment :
-      input1 <-> { 'val1': ?x, 'val2': ?y }
-      output1 <-> { 'action': ?act }
+      input1 <-> json { 'val1': ?x, 'val2': ?y }
+      output1 <-> json { 'action': ?act }
 
 
 // komentari

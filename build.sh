@@ -4,11 +4,13 @@ source $HOME/.bashrc
 
 case $1 in
     -gg|--grammar-gui)
+	antlr4 XMLLexer.g4
 	antlr4 APi.g4
 	javac APi*.java
 	grun APi api_program -gui
     ;;
     -gt|--grammar-tokens)
+	antlr4 XMLLexer.g4
 	antlr4 APi.g4
 	javac APi*.java
 	grun APi api_program -tokens
@@ -25,7 +27,7 @@ case $1 in
 	then
 	    echo "No commit message supplied, aborting!"
 	else
-	    python3 version_control.py
+	    #python3 version_control.py
 	    git add .
 	    git commit -m "$2"
 	    git push origin main
