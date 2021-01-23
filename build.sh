@@ -27,7 +27,7 @@ case $1 in
 	then
 	    echo "No commit message supplied, aborting!"
 	else
-	    #python3 version_control.py
+	    python3 version_control.py
 	    git add .
 	    git commit -m "$2"
 	    git push origin main

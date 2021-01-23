@@ -17,6 +17,9 @@ import tempfile
 import random
 import threading
 from threading import Thread
+import json
+import itertools as it
+import socket
 
 # RegEx for parsing agent definition files
 
@@ -29,6 +32,8 @@ delimiter_re = re.compile( r'DELIMITER (.*)' )
 time_re = re.compile( r'TIME ([0-9.]+)' )
 size_re = re.compile( r'SIZE ([0-9]+)' )
 regex_re = re.compile( r'REGEX .*' )
+
+var_re = re.compile( r'[?][a-zA-Z][a-zA-Z0-9_-]*' )
 
 # Not implemented error message
 
@@ -49,6 +54,7 @@ try:
 except ImportError:
     from yaml import Loader, Dumper
 
+import spade
 from spade.agent import Agent
 from spade.behaviour import FSMBehaviour, State
 from spade import quit_spade
@@ -65,6 +71,7 @@ import logging
 logging.getLogger( 'asyncio' ).setLevel( logging.CRITICAL )
 import websockets
 import nclib
+import pexpect
 
 from pyxf.pyxf import swipl
 
@@ -104,6 +111,14 @@ class APiHolonConfigurationError( Exception ):
 
 class XMPPRegisterException( Exception ):
     '''Exception thrown when the system cannot register at a XMPP registration service'''
+    pass
+
+class APiChannelDefinitionError( Exception ):
+    '''Exception thrown when a channel is ill-defined'''
+    pass
+
+class APiShellInitError( Exception ):
+    '''Esception thrown when shell server hasn't been initialized'''
     pass
 
 class APiTalkingAgent( Agent ):
@@ -703,7 +718,11 @@ class APiBaseAgent( APiTalkingAgent ):
         else:
             imp = [ data ]
         for i in inp:
-            asyncio.get_event_loop().run_until_complete( self.ws( i, callback ) )
+            try:
+                loop = asyncio.get_event_loop()
+            except:
+                loop = asyncio.new_event_loop()
+            loop.run_until_complete( self.ws( i, callback ) )
             if i == self.input_end:
                 self.service_quit( 'Received end delimiter, shutting down WebSocket server!' )
                 return
@@ -1370,31 +1389,63 @@ class APiBaseAgent( APiTalkingAgent ):
             err = 'Invalid input value type "%s"\n' % self.input_value_type
             raise APiAgentDefinitionError( err )
 
+                
+
 
     
 class APiChannel( APiBaseAgent ):
     '''Channel agent.'''
-    def __init__( self, channelname, name, password, channel_input, channel_output ):
+    def __init__( self, channelname, name, password, channel_input=None, channel_output=None, transformer=None ):
         self.channelname = channelname
         super().__init__( name, password )
+        
+        self.kb = swipl()
+
+        self.senders = []
+        self.receivers = []
+        
         self.input = channel_input
         self.output = channel_output
-        self.kb = swipl()
-        self.input_re = re.compile( r'(?P<var>bla)' )
+        self.transformer = transformer
 
-    def io_data_type( self, io ):
-        # TODO: return io_data_type based on channel_input/output
-        # descriptor (can be NIL, VOID, STDIN, STDOUT, STDERR,
-        # JSON, XML, REGEX, TRANSFORMER)
-        # NIL -> sends stop to agent (0 process)
-        # VOID -> sends output to /dev/null
-        # STDIN -> reads input from stdin
-        # STDOUT/STDERR -> writes output to STDIN/STDERR
+        
+        # TODO: return map function based on channel_input/output
+        # descriptor (can be JSON, XML, REGEX, TRANSFORMER)
         # JSON -> JSON input or output
         # XML -> XML input or output
         # REGEX -> Python style regex (with named groups) input
         # TRANSFORMER -> read definition from channel description (.cd) file
-        pass
+
+        if not self.input or not self.output:
+            if self.transformer:
+                self.map = self.map_transformer
+            else:
+                err = 'Cannot define channel without an input/output combination or a transformer'
+                raise APiChannelDefinitionError( err )
+        else:
+            if self.transformer:
+                err = 'Both input/output combination and transformer defined'
+                raise APiChannelDefinitionError( err )
+        
+            
+            elif self.input.startswith( 'regex( ' ):
+                reg = self.input[ 7:-2 ]
+                self.input_re = re.compile( reg )
+                #self.map_re( 'x is 12321 lsakjlaskd x is 987' )
+                self.map = self.map_re
+            elif self.input.startswith( 'json( ' ):
+                # TODO: Implement json
+                raise NotImplementedError( NIE )
+            elif self.input.startswith( 'xml( ' ):
+                # TODO: Implement XML
+                raise NotImplementedError( NIE )
+                
+
+    def input_output( self, data ):
+        # TODO: find a way to avoid processing the command
+        inp = InputStream( command + '\n' )
+        prolog_result = process( inp )
+        # TODO: finish this
         
 
     def map( self, data ):
@@ -1402,16 +1453,30 @@ class APiChannel( APiBaseAgent ):
 
     def map_re( self, data ):
         match = self.input_re.match( data )
+        print( match )
         vars = self.input_re.groupindex.keys()
-        results = []
+        print( vars )
+        results = {}
         for i in vars:
             results[ i ] = match.group( i )
         print( results )
 
+    def map_transformer( self, data ):
+        # TODO: Implement transformer
+        raise NotImplementedError( NIE )
+
+    def map_json( self, data ):
+        # TODO: Implement JSON
+        raise NotImplementedError( NIE )
+
+    def map_xml( self, data ):
+        # TODO: Implement XML
+        raise NotImplementedError( NIE )
+
 class APiAgent( APiBaseAgent ):
     '''Service wrapper agent.'''
 
-    # TODO: Sort methods / coroutines by type
+    # TODO: Sort methods / coroutines by type and write documentation
     def __init__( self, agentname, name, password, args=[], flows=[] ):
         '''
         Constructor.
@@ -1438,9 +1503,30 @@ class APiAgent( APiBaseAgent ):
                 self.flows.extend( pairs )
             else:
                 self.flows.append( f )
-        
+
+
+        # TODO: Not good - inputs are not allways on the LHS
+        # and outputs are not allways on the RHS. We need
+        # to analyze the flows, if self is on the RHS it is
+        # an input to the process and if self is on the
+        # LHS it is an output. If self isn't present
+        # then it is a forward (not processed LHS input is
+        # forwarded directly to RHS output)
         self.input_channels = set( i[ 0 ] for i in flows )
         self.output_channels = set( i[ 1 ] for i in flows )
+
+        self.input_ended = False
+
+        
+        print( self.flows )
+        print( self.input_channels )
+        print( self.output_channels )
+
+        self.shell_ip_stdin = None
+        self.shell_port_stdin = None
+        self.shell_ip_stdout = None
+        self.shell_port_stdout = None
+        self.shell_buffer = []
 
     def _load( self, fh ):
         '''
@@ -1544,8 +1630,225 @@ class APiAgent( APiBaseAgent ):
         Output callback method.
         data - data read from service.
         '''
+        if self.output_delimiter:
+            data += self.output_delimiter
+        self.shell_buffer.append( data )
         self.say( 'I just received:', data )
-        # TODO: connect this to output channels
+            # TODO: connect this to output channels
+
+
+    def subscribe_to_channel( self, channel, channel_type ):
+        # TODO: Implement channel subscription (sender, receiver)
+        # Channel types:
+        # NIL -> sends stop to agent (0 process)
+        # VOID -> sends output to /dev/null
+        # STDIN -> reads input from stdin
+        # STDOUT/STDERR -> writes output to STDIN/STDERR
+        # <name> -> gets instructions from channel on how
+        #           to connect (via Netcat)
+        if channel_type == 'input':
+            if channel == 'NIL':
+                err = 'Input cannot be 0 (NIL)'
+                raise APiChannelDefinitionError( err )
+            elif channel == 'VOID':
+                err = 'Input cannot be VOID'
+                raise APiChannelDefinitionError( err )
+            elif channel == 'STDOUT':
+                err = 'Input cannot be STDOUT'
+                raise APiChannelDefinitionError( err )
+            elif channel == 'STDERR':
+                err = 'Input cannot be STDERR'
+                raise APiChannelDefinitionError( err )
+            elif channel == 'STDIN':
+                self.start_shell_client( prompt=True, await_stdin=True )
+                raise NotImplementedError( NIE )
+            else:
+                # TODO: send message to channel agent
+                # and get instructions on how to
+                # connect
+                ch_agent_name = channel
+                raise NotImplementedError( NIE )
+        elif channel_type == 'output':
+            if channel == 'NIL':
+                # TODO: stop agent
+                raise NotImplementedError( NIE )
+            elif channel == 'VOID':
+                # TODO: send to /dev/null (i.e. do nothing )
+                raise NotImplementedError( NIE )
+            elif channel == 'STDOUT':
+                self.start_shell_client( print_stdout=True )
+                raise NotImplementedError( NIE )
+            elif channel == 'STDERR':
+                self.start_shell_client( print_stderr=False )
+                raise NotImplementedError( NIE )
+            elif channel == 'STDIN':
+                err = 'Output cannot be STDIN'
+                raise APiChannelDefinitionError( err )
+            else:
+                # TODO: send message to channel agent
+                # and get instructions on how to
+                # connect
+                ch_agent_name = channel
+                raise NotImplementedError( NIE )
+
+
+    def start_shell_stdin( self, prompt=False ):
+        '''
+        Start socket server for STDIN shell. If prompt is True
+        write standard prompt (agentname :- ) before each
+        input.
+        '''
+        self.shell_socket_stdin = socket.socket()
+        self.shell_socket_stdin.setsockopt( socket.SOL_SOCKET, socket.SO_REUSEADDR, 1 )
+        self.shell_socket_stdin.bind( ( '0.0.0.0', 0 ) )
+        self.shell_socket_stdin.listen( 0 )
+        self.shell_ip_stdin, self.shell_port_stdin = self.shell_socket_stdin.getsockname()
+
+        print( self.shell_ip_stdin, self.shell_port_stdin )
+        self.shell_client_stdin, self.shell_client_stdin_addr = self.shell_socket_stdin.accept()
+
+        if prompt:
+            self.prompt = '\n%s (agent) :- ' % self.name
+        else:
+            self.prompt = None
+
+        BUFFER_SIZE = 1024
+
+        self.shell_client_stdin.settimeout( 0.1 )
+
+        threads = []
+
+        error = False
+        while True:
+            try:
+                if self.prompt and not error:
+                    self.shell_client_stdin.send( self.prompt.encode() )
+                inp = self.shell_client_stdin.recv( BUFFER_SIZE ).decode()
+                if inp == "exit":
+                    self.shell_client_stdin.close()
+                    self.shell_socket_stdin.close()
+                    break
+                if self.input_ended:
+                    self.shell_client_stdin.send( 'Input end delimiter received, agent is shutting down...'.encode() )
+                    self.shell_client_stdin.close()
+                    self.shell_socket_stdin.close()
+                    break
+                else:
+                    t = Thread( target=self.input, args=( inp, ) )
+                    t.start()
+                    threads.append( t )
+                error = False                                
+            except Exception as e:
+                #print( e )
+                error = True
+                sleep( 0.1 )
+
+        # cleanup
+        for t in threads:
+            t.join()
+
+    def start_shell_stdout( self ):
+        '''
+        Start socket server for STDOUT/STDERR shell. 
+        '''
+
+        self.shell_socket_stdout = socket.socket()
+        self.shell_socket_stdout.setsockopt( socket.SOL_SOCKET, socket.SO_REUSEADDR, 1 )
+        self.shell_socket_stdout.bind( ( '0.0.0.0', 0 ) )
+        self.shell_socket_stdout.listen( 0 )
+        self.shell_ip_stdout, self.shell_port_stdout = self.shell_socket_stdout.getsockname()
+
+        print( self.shell_ip_stdout, self.shell_port_stdout )
+        self.shell_client_stdout, self.shell_client_stdout_addr = self.shell_socket_stdout.accept()
+
+        BUFFER_SIZE = 1024
+
+        self.shell_client_stdout.settimeout( 0.1 )
+
+        error = False
+        while True:
+            try:
+                while self.shell_buffer:
+                    if len( self.shell_buffer ) > 0:
+                        data = self.shell_buffer.pop( 0 )
+                        self.shell_client_stdout.send( data.encode() )
+                    if self.output_end:
+                        if data[ :-1 ] == self.output_end:
+                            self.shell_client_stdout.send( 'Output end delimiter received, agent is shutting down...'.encode() )
+                            self.shell_client_stdout.shutdown( 2 )
+                            self.shell_client_stdout.close()
+                            self.shell_socket_stdout.close()
+                            return
+                error = False                                
+            except Exception as e:
+                print( e )
+                error = True
+                sleep( 0.1 )
+
+
+
+            
+    def start_shell_client( self, prompt=True, await_stdin=True, print_stdout=True, print_stderr=False ):
+        '''
+        Start the agents shell client. 
+        prompt - use a prompt for STDIN shell (will be ignored if await_stdin is False)
+        await_stdin - if True attach agent's input to STDIN (print_stdout and print_stderr will be ignored)
+        print_stdout - if True attach agent's output to STDOUT (print_stderr will be ignored)
+        print_stderr - if True attach agent's output to STDERR
+        '''
+        if await_stdin:
+            self.shell_stdin_thread = Thread( target=self.start_shell_stdin, args=( prompt, ) )
+            self.shell_stdin_thread.start()
+        elif print_stdout or print_stderr:
+            self.shell_stdout_thread = Thread( target=self.start_shell_stdout )
+            self.shell_stdout_thread.start()
+        sleep( 0.1 )
+
+        if await_stdin:
+            self.shell_ip = self.shell_ip_stdin
+            self.shell_port = self.shell_port_stdin
+        elif print_stdout or print_stderr:
+            self.shell_ip = self.shell_ip_stdout
+            self.shell_port = self.shell_port_stdout
+            
+        if not self.shell_ip and not self.shell_port:
+            err = 'The shell has not been initialized'
+            raise APiShellInitError( err )
+        else:
+            agent_tmp_dir = os.path.join( TMP_FOLDER, self.name )
+            if not os.path.exists( agent_tmp_dir ):
+                os.makedirs( agent_tmp_dir )
+            if await_stdin:
+                self.dtach_session = os.path.join( TMP_FOLDER, self.name, 'stdin' )
+            elif print_stdout:
+                self.dtach_session = os.path.join( TMP_FOLDER, self.name, 'stdout' )
+            elif print_stderr:
+                self.dtach_session = os.path.join( TMP_FOLDER, self.name, 'stderr' )
+            else:
+                err = 'No input and not output specified!'
+                raise APiShellInitError( err )
+            cmd = 'dtach -A %s ./../APishc.py %s %d' % ( self.dtach_session, self.shell_ip, self.shell_port )
+            if await_stdin:
+                cmd += ' --input'
+            elif print_stdout:
+                cmd += ' --output'
+            elif print_stderr:
+                cmd += ' --error'
+            #print( cmd )
+            self.shell_client_proc = pexpect.spawn( cmd )
+
+            def output_filter( s ):
+                if 'EOF - dtach terminating' in s.decode():
+                    return '\n'.encode()
+                return s
+            
+            self.shell_client_proc.interact( output_filter=output_filter )
+
+        if await_stdin:
+            self.shell_stdin_thread.join()
+        elif print_stdout or print_stderr:
+            self.shell_stdout_thread.join()
+    
 
     
         
@@ -1627,6 +1930,9 @@ class APi( APiListener ):
     def __init__( self, *args, **kwargs ):
         super().__init__( *args, **kwargs )
         self.ns = APiNamespace()
+        self.STACK = []
+        self.PARSING_XML = False
+
 
     # Enter a parse tree produced by APiParser#api_program.
     def enterApi_program(self, ctx:APiParser.Api_programContext):
@@ -1646,12 +1952,21 @@ class APi( APiListener ):
         pass
 
 
-    # Enter a parse tree produced by APiParser#ioflow.
-    def enterIoflow(self, ctx:APiParser.IoflowContext):
+    # Enter a parse tree produced by APiParser#iflow.
+    def enterIflow(self, ctx:APiParser.IflowContext):
         pass
 
-    # Exit a parse tree produced by APiParser#ioflow.
-    def exitIoflow(self, ctx:APiParser.IoflowContext):
+    # Exit a parse tree produced by APiParser#iflow.
+    def exitIflow(self, ctx:APiParser.IflowContext):
+        pass
+
+
+    # Enter a parse tree produced by APiParser#oflow.
+    def enterOflow(self, ctx:APiParser.OflowContext):
+        pass
+
+    # Exit a parse tree produced by APiParser#oflow.
+    def exitOflow(self, ctx:APiParser.OflowContext):
         pass
 
 
@@ -1765,11 +2080,11 @@ class APi( APiListener ):
 
     # Enter a parse tree produced by APiParser#s_xml.
     def enterS_xml(self, ctx:APiParser.S_xmlContext):
-        pass
+        self.PARSING_XML = True
 
     # Exit a parse tree produced by APiParser#s_xml.
     def exitS_xml(self, ctx:APiParser.S_xmlContext):
-        pass
+        self.PARSING_XML = False
 
 
     # Enter a parse tree produced by APiParser#s_json.
@@ -1783,7 +2098,8 @@ class APi( APiListener ):
 
     # Enter a parse tree produced by APiParser#s_regex.
     def enterS_regex(self, ctx:APiParser.S_regexContext):
-        pass
+        self.STACK.append( 'regex( ' + ctx.children[ 1 ].getText()[ 1:-1 ] + ' )' )
+
 
     # Exit a parse tree produced by APiParser#s_regex.
     def exitS_regex(self, ctx:APiParser.S_regexContext):
@@ -1792,43 +2108,85 @@ class APi( APiListener ):
 
     # Enter a parse tree produced by APiParser#json.
     def enterJson(self, ctx:APiParser.JsonContext):
-        pass
+        print( self.STACK[ -1 ] )
 
     # Exit a parse tree produced by APiParser#json.
     def exitJson(self, ctx:APiParser.JsonContext):
-        pass
-
+        top = self.STACK.pop()
+        self.STACK.append( 'json( %s )' % top )
+        print( self.STACK[ -1 ] )
 
     # Enter a parse tree produced by APiParser#obj.
     def enterObj(self, ctx:APiParser.ObjContext):
-        pass
+        self.STACK.append( 'api_object_begin' )
 
     # Exit a parse tree produced by APiParser#obj.
     def exitObj(self, ctx:APiParser.ObjContext):
-        pass
+        prolog = 'object( '
+        pair = None
+        res = []
+        while pair != 'api_object_begin':
+            pair = self.STACK.pop()
+            if pair != 'api_object_begin':
+                res.append( pair )
+        res.reverse()
+        for val in res:
+            prolog += "%s, " % val
+        prolog = prolog[ :-2 ] + ' )'
+        self.STACK.append( prolog )
 
 
     # Enter a parse tree produced by APiParser#pair.
     def enterPair(self, ctx:APiParser.PairContext):
-        pass
+        self.STACK.append( 'pair' )
+        ch = ctx.children[ 0 ].getText()
+        if ch[ 0 ] in [ "'", '"' ]:
+            val = "'string:%s'" % ch[ 1:-1 ]
+        elif ch[ 0 ] == '?':
+            val = 'X' + ch[ 1: ]
+        self.STACK.append( val )
 
     # Exit a parse tree produced by APiParser#pair.
     def exitPair(self, ctx:APiParser.PairContext):
-        pass
+        val = self.STACK.pop()
+        key = self.STACK.pop()
+        self.STACK.pop()
+        self.STACK.append( "pair( %s, %s )" % ( key, val ) )
 
 
     # Enter a parse tree produced by APiParser#arr.
     def enterArr(self, ctx:APiParser.ArrContext):
-        pass
-
+        self.STACK.append( 'api_array_begin' )
+        
     # Exit a parse tree produced by APiParser#arr.
     def exitArr(self, ctx:APiParser.ArrContext):
-        pass
+        val = None
+        prolog = 'array( ['
+        res = []
+        while val != 'api_array_begin':
+            val = self.STACK.pop()
+            if val != 'api_array_begin':
+                res.append( val )
+        res.reverse()
+        for val in res:
+            prolog += "%s, " % val
+        prolog = prolog[ :-2 ] + ' ] )'
+        self.STACK.append( prolog )
+        
 
 
     # Enter a parse tree produced by APiParser#value.
     def enterValue(self, ctx:APiParser.ValueContext):
-        pass
+        if not self.PARSING_XML:
+            val = ctx.getText()
+            if ctx.VARIABLE():
+                self.STACK.append( 'X' + val[ 1: ] )
+            elif ctx.STRING():
+                self.STACK.append( "'string:%s'" % val[ 1:-1 ] )
+            elif ctx.NUMBER():
+                self.STACK.append( "'number:%s'" % val )
+            elif val in [ 'true', 'false', 'null' ]:
+                self.STACK.append( "'atom:%s'" % val )
 
     # Exit a parse tree produced by APiParser#value.
     def exitValue(self, ctx:APiParser.ValueContext):
@@ -1837,43 +2195,84 @@ class APi( APiListener ):
 
     # Enter a parse tree produced by APiParser#xml.
     def enterXml(self, ctx:APiParser.XmlContext):
-        pass
+        self.STACK.append( 'xml' )
 
     # Exit a parse tree produced by APiParser#xml.
     def exitXml(self, ctx:APiParser.XmlContext):
-        pass
+        top = self.STACK.pop()
+        self.STACK.append( 'xml( %s )' % top )
+        print( self.STACK[ -1 ] )
 
 
     # Enter a parse tree produced by APiParser#prolog.
     def enterProlog(self, ctx:APiParser.PrologContext):
-        pass
+        self.STACK.append( 'api_prolog_begin' )
 
     # Exit a parse tree produced by APiParser#prolog.
     def exitProlog(self, ctx:APiParser.PrologContext):
-        pass
+        val = None
+        prolog = 'prolog( '
+        res = []
+        while val != 'api_prolog_begin':
+            val = self.STACK.pop()
+            if val != 'api_prolog_begin':
+                res.append( val )
+        res.reverse()
+        for val in res:
+            prolog += '%s, ' % val
+        prolog = prolog[ :-2 ] + ' )'
+        self.STACK.append( prolog )
 
 
     # Enter a parse tree produced by APiParser#content.
     def enterContent(self, ctx:APiParser.ContentContext):
-        pass
+        self.STACK.append( 'api_content_begin' )
 
     # Exit a parse tree produced by APiParser#content.
     def exitContent(self, ctx:APiParser.ContentContext):
-        pass
+        val = None
+        prolog = 'content( '
+        res = []
+        while val != 'api_content_begin':
+            val = self.STACK.pop()
+            if val != 'api_content_begin':
+                res.append( val )
+        res.reverse()
+        for val in res:
+            prolog += '%s, ' % val
+        prolog = prolog[ :-2 ] + ' )'
+        self.STACK.append( prolog )
 
 
     # Enter a parse tree produced by APiParser#element.
     def enterElement(self, ctx:APiParser.ElementContext):
-        pass
+        self.STACK.append( 'api_element_begin' )
 
     # Exit a parse tree produced by APiParser#element.
     def exitElement(self, ctx:APiParser.ElementContext):
-        pass
+        val = None
+        prolog = 'element( '
+        res = []
+        while val != 'api_element_begin':
+            val = self.STACK.pop()
+            if val != 'api_element_begin':
+                res.append( val )
+        elem_name = res.pop()
+        prolog += 'elem( %s ), ' % elem_name
+        res.reverse()
+        for val in res:
+            prolog += '%s, ' % val
+        prolog = prolog[ :-2 ] + ' )'
+        self.STACK.append( prolog )
 
 
     # Enter a parse tree produced by APiParser#var_or_ident.
     def enterVar_or_ident(self, ctx:APiParser.Var_or_identContext):
-        pass
+        val = ctx.getText()
+        if ctx.IDENT():
+            self.STACK.append( "'ident:%s'" % val )
+        elif ctx.VARIABLE():
+            self.STACK.append( 'X' + val[ 1: ] )
 
     # Exit a parse tree produced by APiParser#var_or_ident.
     def exitVar_or_ident(self, ctx:APiParser.Var_or_identContext):
@@ -1891,16 +2290,41 @@ class APi( APiListener ):
 
     # Enter a parse tree produced by APiParser#attribute.
     def enterAttribute(self, ctx:APiParser.AttributeContext):
-        pass
+        self.STACK.append( 'api_attribute_begin' )
+        ch = ctx.children[ 2 ].getText()
+        if ch[ 0 ] in [ "'", '"' ]:
+            val = "'string:%s'" % ch[ 1:-1 ]
+        elif ch[ 0 ] == '?':
+            val = 'X' + ch[ 1: ]
+        self.STACK.append( val )
 
     # Exit a parse tree produced by APiParser#attribute.
     def exitAttribute(self, ctx:APiParser.AttributeContext):
-        pass
+        val = None
+        prolog = 'attribute( '
+        res = []
+        while val != 'api_attribute_begin':
+            val = self.STACK.pop()
+            if val != 'api_attribute_begin':
+                res.append( val )
+        for val in res:
+            prolog += '%s, ' % val
+        prolog = prolog[ :-2 ] + ' )'
+        self.STACK.append( prolog )
 
 
     # Enter a parse tree produced by APiParser#chardata.
     def enterChardata(self, ctx:APiParser.ChardataContext):
-        pass
+        # TODO: This is a hackish solution. There must be a more elegant one.
+        values = [ i.getText() for i in ctx.children ]
+        for val in values:
+            if val[ 0 ] == '?':
+                self.STACK.append( 'X' + val[ 1: ] )
+            else:
+                self.STACK.append( "'atom:%s'" % val )
+
+        
+            
 
     # Exit a parse tree produced by APiParser#chardata.
     def exitChardata(self, ctx:APiParser.ChardataContext):
@@ -1914,6 +2338,7 @@ class APi( APiListener ):
     # Exit a parse tree produced by APiParser#misc.
     def exitMisc(self, ctx:APiParser.MiscContext):
         pass
+    
 
 
 
@@ -1943,6 +2368,10 @@ def process( stream ):
     printer = APi()
     walker = ParseTreeWalker()
     walker.walk( printer, tree )
+    try:
+        return parser.STACK[ -1 ]
+    except:
+        pass # TODO: remove exception handling when all parts of parser are implemented
     
 
 BYE = 'Bye!'
@@ -1979,7 +2408,7 @@ def main():
                         if not line:
                             break
                     
-                else:
+                if command:
                     stream = InputStream( command + '\n' )
                     process( stream )
 
@@ -1998,19 +2427,27 @@ if __name__ == '__main__':
     '''rs = APiRegistrationService( 'APi-test' )
     rs.register( 'ivek' )'''
 
-    a = APiAgent( 'bla_nc_nc', 'bla0agent@dragon.foi.hr', 'tajna', flows=[ (1, 2), (3, 4), (1, 5), (3, 6), (1, 3, 5, 7) ] )
+    
+    a = APiAgent( 'bla_ws_ws', 'bla0agent@dragon.foi.hr', 'tajna', flows=[ ('a', 'self'), ('self', 'stdout'), ('self', 'c'), ('stdin', 'self'), ('d', 'e', '0') ] )
 
+    
+    
     sleep( 1 )
     a.input( 'avauhu\nguhu\nbuhu\nwuhu\ncuhu\n' )
-    sleep( 3 )
+    sleep( 1 )
     a.input( 'juhu\n' )
-    sleep( 2 )
+    sleep( 1 )
     a.input( 'muhu\n' )
     a.input( 'ahu\n' )
     sleep( 1 )
     a.input( 'puhu\nluhu\n' )
-    sleep( 2 )
+    sleep( 1 )
     a.input( '<!eof!>' )
+
+    a.start_shell_client( await_stdin=False, print_stdout=False, print_stderr=True )
+    
+
+    #c = APiChannel( 'test', 'bla0agent@dragon.foi.hr', 'tajna', channel_input='regex( x is (?P<var>[0-9]+) )', channel_output="json( object( pair( 'string:action', Xact ) ) )" )
     
     print( ns )
 

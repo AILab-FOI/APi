@@ -26,12 +26,21 @@ class APiListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by APiParser#ioflow.
-    def enterIoflow(self, ctx:APiParser.IoflowContext):
+    # Enter a parse tree produced by APiParser#iflow.
+    def enterIflow(self, ctx:APiParser.IflowContext):
         pass
 
-    # Exit a parse tree produced by APiParser#ioflow.
-    def exitIoflow(self, ctx:APiParser.IoflowContext):
+    # Exit a parse tree produced by APiParser#iflow.
+    def exitIflow(self, ctx:APiParser.IflowContext):
+        pass
+
+
+    # Enter a parse tree produced by APiParser#oflow.
+    def enterOflow(self, ctx:APiParser.OflowContext):
+        pass
+
+    # Exit a parse tree produced by APiParser#oflow.
+    def exitOflow(self, ctx:APiParser.OflowContext):
         pass
 
 

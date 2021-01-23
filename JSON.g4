@@ -29,13 +29,13 @@ value
    : VARIABLE
    | STRING
    | NUMBER
-   | SPEC_CHAR
+   | SPEC_CHAR 
    | obj
    | arr
    | 'true'
    | 'false'
    | 'null'
-   ;
+   ; // TODO: find out why SPEC_CHAR is here
 
 SPEC_CHAR : ~('a'..'z' | 'A' .. 'Z' | '0' .. '9' | ':' | '.' | '-' | '>' | '<' | '/' | ' ' ) ;
 

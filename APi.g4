@@ -12,9 +12,11 @@ options { tokenVocab=XMLLexer; }
 
 api_program : ( s_import | s_environment | s_channel | s_channel_transformer | s_agent | s_start | COMMENT | NEWLINE )*? ;
 
-s_environment : ENVIRONMENT ':' NEWLINE ioflow+ ;
+s_environment : ENVIRONMENT ':' NEWLINE ( iflow | oflow )+ ;
 
-ioflow : IDENT FORMAT s_input ;
+iflow : TAB IDENT INPUT_FORMAT s_input NEWLINE ;
+
+oflow : TAB IDENT OUTPUT_FORMAT s_output NEWLINE ;
 
 s_start : START pi_expr ;
 
@@ -86,7 +88,9 @@ JSON : 'json' ;
 
 XML : 'xml' ;
 
-FORMAT : '<->' ;
+INPUT_FORMAT : '=>' ;
+
+OUTPUT_FORMAT : '<=' ;
 
 SENDS  : '->' ;
 
