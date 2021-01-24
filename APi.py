@@ -1505,22 +1505,43 @@ class APiAgent( APiBaseAgent ):
                 self.flows.append( f )
 
 
-        # TODO: Not good - inputs are not allways on the LHS
+        # inputs are not allways on the LHS
         # and outputs are not allways on the RHS. We need
         # to analyze the flows, if self is on the RHS it is
         # an input to the process and if self is on the
         # LHS it is an output. If self isn't present
         # then it is a forward (not processed LHS input is
         # forwarded directly to RHS output)
-        self.input_channels = set( i[ 0 ] for i in flows )
-        self.output_channels = set( i[ 1 ] for i in flows )
+        self.input_channels = set( i[ 0 ] for i in self.flows if i[ 1 ] == 'self' )
+        self.output_channels = set( i[ 1 ] for i in self.flows if i[ 0 ] == 'self' )
+        self.forward_channels = set( i for i in self.flows if i[ 0 ] != 'self' and i[ 1 ] != 'self' )
 
-        self.input_ended = False
-
-        
         print( self.flows )
         print( self.input_channels )
         print( self.output_channels )
+        print( self.forward_channels )
+
+        for i in self.input_channels:
+            try:
+                self.subscribe_to_channel( i, 'input' )
+            except NotImplementedError as e:
+                print( 'Not implemented for', i )
+        for i in self.output_channels:
+            try:
+                self.subscribe_to_channel( i, 'output' )
+            except NotImplementedError as e:
+                print( 'Not implemented for', i )
+        for i, o in self.forward_channels:
+            try:
+                self.subscribe_to_channel( i, 'input' )
+            except NotImplementedError as e:
+                print( 'Not implemented for', i )
+            try:
+                self.subscribe_to_channel( o, 'output' )
+            except NotImplementedError as e:
+                print( 'Not implemented for', o )
+
+        self.input_ended = False
 
         self.shell_ip_stdin = None
         self.shell_port_stdin = None
@@ -1661,7 +1682,6 @@ class APiAgent( APiBaseAgent ):
                 raise APiChannelDefinitionError( err )
             elif channel == 'STDIN':
                 self.start_shell_client( prompt=True, await_stdin=True )
-                raise NotImplementedError( NIE )
             else:
                 # TODO: send message to channel agent
                 # and get instructions on how to
@@ -1677,10 +1697,8 @@ class APiAgent( APiBaseAgent ):
                 raise NotImplementedError( NIE )
             elif channel == 'STDOUT':
                 self.start_shell_client( print_stdout=True )
-                raise NotImplementedError( NIE )
             elif channel == 'STDERR':
                 self.start_shell_client( print_stderr=False )
-                raise NotImplementedError( NIE )
             elif channel == 'STDIN':
                 err = 'Output cannot be STDIN'
                 raise APiChannelDefinitionError( err )
@@ -1810,7 +1828,20 @@ class APiAgent( APiBaseAgent ):
         elif print_stdout or print_stderr:
             self.shell_ip = self.shell_ip_stdout
             self.shell_port = self.shell_port_stdout
+
             
+        # TODO: Move this part to main program (platform or listener).
+        # Agent should have a method to return all hosts/ports for
+        # active shells so remote clients can connect.
+        # Also, implement attach command in core language
+        # similar to start (e.g. attach agent1 stdin).
+        # Nice to have: implement describe command in core
+        # language that will print out an introspection
+        # of an agent (i.e. statistics, active shells, flows etc.).
+        # Additionally, implement statistics decorator function
+        # to collect statistics about flows - i.e. how much
+        # input (in bytes and messages), how much output (in bytes
+        # and messages) etc.
         if not self.shell_ip and not self.shell_port:
             err = 'The shell has not been initialized'
             raise APiShellInitError( err )
@@ -2428,10 +2459,10 @@ if __name__ == '__main__':
     rs.register( 'ivek' )'''
 
     
-    a = APiAgent( 'bla_ws_ws', 'bla0agent@dragon.foi.hr', 'tajna', flows=[ ('a', 'self'), ('self', 'stdout'), ('self', 'c'), ('stdin', 'self'), ('d', 'e', '0') ] )
+    a = APiAgent( 'bla_ws_ws', 'bla0agent@dragon.foi.hr', 'tajna', flows=[ ('a', 'self'), ('self', 'STDOUT'), ('self', 'c'), ('STDIN', 'self'), ('d', 'e', 'NIL'), ('b','VOID') ] )
 
     
-    
+    '''
     sleep( 1 )
     a.input( 'avauhu\nguhu\nbuhu\nwuhu\ncuhu\n' )
     sleep( 1 )
@@ -2443,8 +2474,8 @@ if __name__ == '__main__':
     a.input( 'puhu\nluhu\n' )
     sleep( 1 )
     a.input( '<!eof!>' )
-
-    a.start_shell_client( await_stdin=False, print_stdout=False, print_stderr=True )
+    '''
+    #a.start_shell_client( await_stdin=True, print_stdout=True, print_stderr=True )
     
 
     #c = APiChannel( 'test', 'bla0agent@dragon.foi.hr', 'tajna', channel_input='regex( x is (?P<var>[0-9]+) )', channel_output="json( object( pair( 'string:action', Xact ) ) )" )
