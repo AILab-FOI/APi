@@ -27,7 +27,7 @@ agur
 gero arte 
 servus
 bfiad di
-bfiad aih (plural)
+bfiad aih
 auf Wiedersehen
 wiedersehen
 да пабачэння da pabačeńnya
@@ -113,7 +113,8 @@ moce
 ni sa moce
 näkemiin
 heihei
-moimoi (MOI-moi) and moikka (MOIK-ka)
+moimoi
+moikka
 saluu
 tot ziens
 au revoir
@@ -157,9 +158,10 @@ szia
 bless
 vertu sæll
 sé þig seinna
-selamat tinggal or selamat jalan
+selamat tinggal
+selamat jalan
 sampai jumpa
-daag used casually
+daag
 ᐃᓛᓂᓗ
 ᑕᓪᕙᐅᔪᑎᑦ
 slán

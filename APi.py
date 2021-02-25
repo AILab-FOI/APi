@@ -1286,7 +1286,7 @@ class APiBaseAgent( APiTalkingAgent ):
             self.ncfile_thread.start()
             # TODO: find out why only the first output is processed, i.e.
             # ncat writes to the file and closes it seemingly after each
-            # input making it possible for read_file() to read it an end
+            # input making it possible for read_file() to read it and end
             # prematurely. See if this can be avoided.
             
             error = True
@@ -2459,10 +2459,10 @@ if __name__ == '__main__':
     rs.register( 'ivek' )'''
 
     
-    a = APiAgent( 'bla_ws_ws', 'bla0agent@dragon.foi.hr', 'tajna', flows=[ ('a', 'self'), ('self', 'STDOUT'), ('self', 'c'), ('STDIN', 'self'), ('d', 'e', 'NIL'), ('b','VOID') ] )
+    a = APiAgent( 'bla_ws_ws', 'bla0agent@dragon.foi.hr', 'tajna', flows=[ ('a', 'self'), ('self', 'c'), ('d', 'e', 'NIL'), ('b','VOID') ] ) # ('STDIN', 'self'),  ('self', 'STDOUT'),
 
     
-    '''
+    
     sleep( 1 )
     a.input( 'avauhu\nguhu\nbuhu\nwuhu\ncuhu\n' )
     sleep( 1 )
@@ -2474,7 +2474,7 @@ if __name__ == '__main__':
     a.input( 'puhu\nluhu\n' )
     sleep( 1 )
     a.input( '<!eof!>' )
-    '''
+    
     #a.start_shell_client( await_stdin=True, print_stdout=True, print_stderr=True )
     
 
