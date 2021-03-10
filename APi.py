@@ -20,6 +20,7 @@ from threading import Thread
 import json
 import itertools as it
 import socket
+from fnvhash import fnv1a_32
 
 # RegEx for parsing agent definition files
 
@@ -56,7 +57,9 @@ except ImportError:
 
 import spade
 from spade.agent import Agent
-from spade.behaviour import FSMBehaviour, State
+from spade.behaviour import OneShotBehaviour, CyclicBehaviour, FSMBehaviour, State
+from spade.template import Template
+from spade.message import Message
 from spade import quit_spade
 
 import requests
@@ -89,6 +92,18 @@ def pairwise( iterable ):
     next( b, None )
     return zip( a, b )
 
+def verify( hashed, string ):
+    '''
+    Verify if a given hashed string is equal to a string when
+    hashed with a FNV-1a function.
+    '''
+    return hashed == hash( string )
+
+def hash( string ):
+    '''
+    Hash a given string using FNV-1a function.
+    '''
+    return hex( fnv1a_32( string.encode() ) )
     
 class APiIOError( IOError ):
     '''Exception thrown when a file (usually agent definition) is not present.'''
@@ -126,10 +141,62 @@ class APiTalkingAgent( Agent ):
     Base agent (auxilliary methods and behaviours for all other
     types of agents
     '''
+    def __init__( self, name, password, token=None ):
+        super().__init__( name, password )
+        self.token = token
+        if token:
+            self.auth = hash( str( self.jid.bare() ) + self.token )
+        else:
+            self.auth = None
+        
+        # Output buffer for messages to be send
+        self.output_buffer = []
+        # Input acknowledgement set for messages that are awaitng a reply
+        self.input_ack = set()
+
+        # Address book of other agents
+        self.address_book = {}
+    
     def say( self, *msg ):
         print( '%s:' % self.name, *msg )
 
-    # Add stopping behaviour on message
+    def verify( self, msg ):
+        return verify( msg.metadata[ 'auth-token' ], str( msg.sender ) + self.token )
+
+    def setup( self ):
+        oq = self.OutputQueue()
+        self.add_behaviour( oq )
+        st = self.Stop()
+        self.add_behaviour( st )
+
+    def schedule_message( self, to, body='', metadata={} ):
+        self.say( 'Scheduling message', metadata, to )
+        msg = Message( to=to, body=body, metadata=metadata )
+        self.output_buffer.append( msg )
+        try:
+            self.input_ack.add( msg.metadata[ 'reply-with' ] )
+        except KeyError:
+            pass
+
+    class OutputQueue( CyclicBehaviour ):
+        async def run( self ):
+            while self.agent.output_buffer:
+                msg = self.agent.output_buffer.pop()
+                await self.send( msg )
+
+    class Stop( CyclicBehaviour ):
+        # TODO: Test and validate this
+        async def run( self ):
+            msg = await self.receive( timeout=1 )
+            if msg:
+                try:
+                    performative = msg.metadata[ "performative" ]
+                    if performative == 'request' and msg.sender == self.agent.holon and msg.content == 'stop':
+                        self.agent.stop()
+                        self.agent.kill()
+                except KeyError:
+                    pass
+
 
 class APiBaseAgent( APiTalkingAgent ):
     '''
@@ -1395,14 +1462,28 @@ class APiBaseAgent( APiTalkingAgent ):
     
 class APiChannel( APiBaseAgent ):
     '''Channel agent.'''
-    def __init__( self, channelname, name, password, channel_input=None, channel_output=None, transformer=None ):
+
+    REPL_STR = '"$$$API_THIS_IS_VARIABLE_%s$$$"'
+    def __init__( self, channelname, name, password, holon, token, channel_input=None, channel_output=None, transformer=None ):
         self.channelname = channelname
-        super().__init__( name, password )
+        self.holon = holon
+        super().__init__( name, password, token )
         
         self.kb = swipl()
+        self.var_re = re.compile( r'[\?][a-zA-Z][a-zA-Z0-9-_]*' )
 
         self.senders = []
         self.receivers = []
+
+        self.agree_message_template = {}
+        self.agree_message_template[ 'performative' ] = 'agree'
+        self.agree_message_template[ 'ontology' ] = 'APiDataTransfer'
+        self.agree_message_template[ 'auth-token' ] = self.auth
+
+        self.refuse_message_template = {}
+        self.refuse_message_template[ 'performative' ] = 'refuse'
+        self.refuse_message_template[ 'ontology' ] = 'APiDataTransfer'
+        self.refuse_message_template[ 'auth-token' ] = self.auth
         
         self.input = channel_input
         self.output = channel_output
@@ -1410,79 +1491,150 @@ class APiChannel( APiBaseAgent ):
 
         
         # TODO: return map function based on channel_input/output
-        # descriptor (can be JSON, XML, REGEX, TRANSFORMER)
-        # JSON -> JSON input or output
+        # descriptor (can be JSON, XML, REGEX, TRANSFORMER, TRANSPARENT)
+        # * JSON -> JSON input or output
         # XML -> XML input or output
-        # REGEX -> Python style regex (with named groups) input
+        # * REGEX -> Python style regex (with named groups) input
         # TRANSFORMER -> read definition from channel description (.cd) file
+        # * TRANSPARENT -> no mapping needed, just forward
+        #
+        # * -> Done!
 
+        
         if not self.input or not self.output:
             if self.transformer:
                 self.map = self.map_transformer
             else:
-                err = 'Cannot define channel without an input/output combination or a transformer'
-                raise APiChannelDefinitionError( err )
+                # TRANSPARENT channel (default)
+                self.map = lambda x: x
         else:
             if self.transformer:
-                err = 'Both input/output combination and transformer defined'
+                err = "Both input/output combination and transformer defined. I don't know which mapping to use."
                 raise APiChannelDefinitionError( err )
         
             
             elif self.input.startswith( 'regex( ' ):
                 reg = self.input[ 7:-2 ]
                 self.input_re = re.compile( reg )
-                #self.map_re( 'x is 12321 lsakjlaskd x is 987' )
                 self.map = self.map_re
             elif self.input.startswith( 'json( ' ):
                 # TODO: Implement json
-                raise NotImplementedError( NIE )
+                self.input_json = self.input[ 6:-2 ]
+                self.kb.query( 'use_module(library(http/json))' )
+                cp = self.input_json
+                replaces = {}
+                for var in self.var_re.findall( self.input_json ):
+                    rpl = self.REPL_STR % var
+                    replaces[ rpl[ 1:-1 ] ] = var
+                    cp = cp.replace( var, rpl )
+                query = " APIRES = ok, open_string( '%s', S ), json_read_dict( S, X ). " % cp
+                res = self.kb.query( query )
+                prolog_json = res[ 0 ][ 'X' ]
+                for k, v in replaces.items():
+                    prolog_json = prolog_json.replace( k, 'X' + v[ 1: ] )
+
+                self.input_json = prolog_json
+                    
+                self.map = self.map_json
             elif self.input.startswith( 'xml( ' ):
                 # TODO: Implement XML
                 raise NotImplementedError( NIE )
                 
-
-    def input_output( self, data ):
-        # TODO: find a way to avoid processing the command
-        inp = InputStream( command + '\n' )
-        prolog_result = process( inp )
-        # TODO: finish this
-        
 
     def map( self, data ):
         pass
 
     def map_re( self, data ):
         match = self.input_re.match( data )
-        print( match )
         vars = self.input_re.groupindex.keys()
-        print( vars )
         results = {}
         for i in vars:
             results[ i ] = match.group( i )
-        print( results )
+        query = ''
+        for var, val in results.items():
+            query += 'X' + var + " = '" + val + "', "
+        query = 'APIRES = ok, ' + query[ :-2 ]
+        res = self.kb.query( query )
+        return self.format_output( res )
+
+
+    def format_output( self, res ):
+        output = self.output
+        for var, val in res[ 0 ].items():
+            output = output.replace( '?' + var[ 1: ], val )
+        return output
+            
 
     def map_transformer( self, data ):
         # TODO: Implement transformer
         raise NotImplementedError( NIE )
 
     def map_json( self, data ):
-        # TODO: Implement JSON
-        raise NotImplementedError( NIE )
+        query = " APIRES = ok, open_string( '%s', S ), json_read_dict( S, X ). " % data
+        res = self.kb.query( query )
+        prolog_json = res[ 0 ][ 'X' ]
+        query = " APIRES = ok, X = %s, Y = %s, X = Y. " % ( prolog_json, self.input_json )
+        res = self.kb.query( query )
+        del res[ 0 ][ 'X' ]
+        del res[ 0 ][ 'Y' ]
+        return self.format_output( res )
 
     def map_xml( self, data ):
         # TODO: Implement XML
         raise NotImplementedError( NIE )
 
+    def get_server( self ):
+        # TODO: Implement dynamic server creation
+        return 'localhost', 2709, 'tcp'
+
+
+    class Subscribe( CyclicBehaviour ):
+        async def run( self ):
+            msg = await self.receive( timeout=1 )
+            if msg:
+                if self.agent.verify( msg ):
+                    self.agent.say( 'Message verified, processing ...' )
+                    self.agent.receivers.append( str( msg.sender ) )
+                    metadata = self.agent.agree_message_template
+                    metadata[ 'in-reply-to' ] = msg.metadata[ 'reply-with' ]
+
+                    server, port, protocol = self.agent.get_server()
+                    metadata[ 'server' ] = server
+                    metadata[ 'port' ] = port
+                    metadata[ 'protocol' ] = protocol
+                else:
+                    self.agent.say( 'Message could not be verified. IMPOSTER!!!!!!' )
+                    metadata = self.agent.refuse_message_template
+                    metadata[ 'in-reply-to' ] = msg.metadata[ 'reply-with' ]
+                    metadata[ 'reason' ] = 'security-policy'
+                    self.agent.schedule_message( str( msg.sender ), metadata=metadata )
+
+    async def setup(self):
+        super().setup()
+            
+        bsubs = self.Subscribe()
+        bsubsTemplate = Template(
+            metadata={ "performative": "subscribe",
+                       "ontology": "APiDataTransfer"
+            }
+        )      
+        self.add_behaviour( bsubs, bsubsTemplate )
+
+
+
+
 class APiAgent( APiBaseAgent ):
     '''Service wrapper agent.'''
 
     # TODO: Sort methods / coroutines by type and write documentation
-    def __init__( self, agentname, name, password, args=[], flows=[] ):
+    def __init__( self, agentname, name, password, holon, token, args=[], flows=[] ):
         '''
         Constructor.
         agentname - name as in agent definition (.ad) file.
         name - XMPP/Jabber username
         password - XMPP/Jabber password
+        holon - parent holon
+        token - token from holon
         args - list of arguments (from APi statement)
         flows - list of message flows (from APi statement)
         '''
@@ -1491,8 +1643,9 @@ class APiAgent( APiBaseAgent ):
         except IOError as e:
             err = 'Missing agent definition file or permission issue.\n' + str( e )
             raise APiIOError( err )
-        super().__init__( name, password )
+        super().__init__( name, password, token )
         self.agentname = agentname
+        self.holon = holon
         self._load( fh )
         self.agentargs = args
 
@@ -1520,6 +1673,24 @@ class APiAgent( APiBaseAgent ):
         print( self.input_channels )
         print( self.output_channels )
         print( self.forward_channels )
+
+        self.input_channel_query_buffer = []
+        self.output_channel_query_buffer = []
+
+        self.query_msg_template = {}
+        self.query_msg_template[ 'performative' ] = 'query-ref'
+        self.query_msg_template[ 'ontology' ] = 'APiQuery'
+        self.query_msg_template[ 'auth-token' ] = self.auth
+
+        self.subscribe_msg_template = {}
+        self.subscribe_msg_template[ 'performative' ] = 'subscribe'
+        self.subscribe_msg_template[ 'ontology' ] = 'APiDataTransfer'
+        self.subscribe_msg_template[ 'auth-token' ] = self.auth
+
+        self.writeto_msg_template = {}
+        self.writeto_msg_template[ 'performative' ] = 'request'
+        self.writeto_msg_template[ 'ontology' ] = 'APiDataTransfer'
+        self.writeto_msg_template[ 'auth-token' ] = self.auth
 
         for i in self.input_channels:
             try:
@@ -1643,8 +1814,6 @@ class APiAgent( APiBaseAgent ):
             raise APiAgentDefinitionError( err )
             
         
-        #self.say( self.descriptor )
-
     
     def output_callback( self, data ):
         '''
@@ -1686,8 +1855,8 @@ class APiAgent( APiBaseAgent ):
                 # TODO: send message to channel agent
                 # and get instructions on how to
                 # connect
-                ch_agent_name = channel
-                raise NotImplementedError( NIE )
+                self.say( 'Adding input channel', channel )
+                self.input_channel_query_buffer.append( channel )
         elif channel_type == 'output':
             if channel == 'NIL':
                 # TODO: stop agent
@@ -1706,8 +1875,7 @@ class APiAgent( APiBaseAgent ):
                 # TODO: send message to channel agent
                 # and get instructions on how to
                 # connect
-                ch_agent_name = channel
-                raise NotImplementedError( NIE )
+                self.output_channel_query_buffer.append( channel )
 
 
     def start_shell_stdin( self, prompt=False ):
@@ -1879,15 +2047,205 @@ class APiAgent( APiBaseAgent ):
             self.shell_stdin_thread.join()
         elif print_stdout or print_stderr:
             self.shell_stdout_thread.join()
+
+    async def setup( self ):
+        super().setup()
+        bqc = self.ConnectChannels()
+        self.add_behaviour( bqc )
+
+        bstc = self.QueryChannels()
+        bstc_template = Template(
+            metadata={ "ontology": "APiQuery" }
+        )
+        self.add_behaviour( bstc, bstc_template )
+
+
+    class ConnectChannels( OneShotBehaviour ):
+        async def run( self ):
+            for inp in self.agent.input_channel_query_buffer:
+                metadata = self.agent.query_msg_template
+                metadata[ 'reply-with' ] = str( uuid4().hex )
+                metadata[ 'channel' ] = inp
+                self.agent.schedule_message( self.agent.holon, metadata=metadata )
+                while True:
+                    try:
+                        channel = self.agent.address_book[ inp ]
+                        break
+                    except KeyError:
+                        await asyncio.sleep( 0.1 )
+                
+                metadata = self.agent.subscribe_msg_template
+                metadata[ 'reply-with' ] = str( uuid4().hex )
+                self.agent.schedule_message( channel, metadata=metadata )
+
+                # TODO: check if server info has been stored already,
+                #       sleep otherwise. Then, connect to server and
+                #       establish flows.
     
 
-    
+
+    class QueryChannels( CyclicBehaviour ):
+        async def run( self ):
+            msg = await self.receive( timeout=1 )
+            if msg:
+                if self.agent.verify( msg ):
+                    self.agent.say( 'Message verified, processing ...' )
+                    channel = msg.metadata[ 'address' ]
+                    try:
+                        self.agent.input_ack.remove( msg.metadata[ 'in-reply-to' ] )
+
+                        if msg.metadata[ 'performative' ] == 'refuse':
+                            self.agent.say( 'Error getting channel address due to ' + msg.metadata[ 'reson' ] )
+                            self.agent.kill()
+                        elif msg.metadata[ 'success' ] == 'true':
+                            self.agent.address_book[ msg.metadata[ 'agent' ] ] = channel
+                        else:
+                            self.agent.say( 'Error getting channel address. Channel unknown to holon.' )
+                            self.agent.kill()
+                            
+                    except KeyError:
+                        self.agent.say( 'I have no memory of this message. (awkward Gandalf look)' )           
+                else:
+                    self.agent.say( 'Message could not be verified. IMPOSTER!!!!!!' )
+
+    class SetupChannels( CyclicBehaviour ):
+        async def run( self ):
+            msg = await self.receive( timeout=1 )
+            if msg:
+                if self.agent.verify( msg ):
+                    self.agent.say( 'Message verified, processing ...' )
+                    try:
+                        self.agent.input_ack.remove( msg.metadata[ 'in-reply-to' ] )
+
+                        if msg.metadata[ 'performative' ] == 'refuse':
+                            self.agent.say( 'Error connecting to channel address due to ' + msg.metadata[ 'reson' ] )
+                            self.agent.kill()
+                        else:
+                            # TODO: Store server info locally
+                            pass
+                            
+                    except KeyError:
+                        self.agent.say( 'I have no memory of this message. (awkward Gandalf look)' )           
+                else:
+                    self.agent.say( 'Message could not be verified. IMPOSTER!!!!!!' )
         
-class APiHolon( APiBaseAgent ):
-    '''A holon created by another api file.'''
-    def __init__( self, holonname, name, password ):
-        super().__init__( name, password )
+class APiHolon( APiTalkingAgent ):
+    '''A holon created by an .api file.'''
+    '''TODO: Finish holon implementation'''
+    def __init__( self, holonname, name, password, agents, channels, environment, holons, execution_plan ):
+        self.token = str( uuid4().hex )
+        super().__init__( name, password, str( uuid4().hex ) )
         self.holonname = holonname
+        self.address = str( self.jid.bare() )
+        self.namespace = APiNamespace()
+        self.registrar = APiRegistrationService( holonname )
+
+        self.setup_environment( environment )
+
+        self.agents = {}
+        for a in agents:
+            self.setup_agent( a )
+
+        self.channels = {}
+        for c in channels:
+            self.setup_channel( c )
+
+        self.holons = {}
+        for h in holons:
+            self.setup_holon( h )
+
+        self.execution_plan = None
+        self.setup_execution( execution_plan )
+
+        self.query_message_template = {}
+        self.query_message_template[ 'performative' ] = 'inform-ref'
+        self.query_message_template[ 'ontology' ] = 'APiQuery'
+        self.query_message_template[ 'auth-token' ] = self.auth
+
+        self.refuse_message_template = {}
+        self.refuse_message_template[ 'performative' ] = 'refuse'
+        self.refuse_message_template[ 'ontology' ] = 'APiQuery'
+        self.refuse_message_template[ 'auth-token' ] = self.auth
+        self.refuse_message_template[ 'reason' ] = 'security-policy'
+        
+        
+
+    def setup_agent( self, agent ):
+        address, password = self.registrar.register( agent[ 'name' ] )
+        a = APiAgent( agent[ 'name' ], address, password, self.address, self.token, agent[ 'args' ], agent[ 'flows' ] )
+        agent[ 'address' ] = address
+        agent[ 'instance' ] = a
+        self.agents[ agent[ 'name' ] ] = agent
+
+    def setup_channel( self, channel ):
+        address, password = self.registrar.register( channel[ 'name' ] )
+        c = APiChannel( channel[ 'name' ], address, password, self.address, self.token, channel_input=channel[ 'input' ], channel_output=channel[ 'output' ], transformer=channel[ 'transformer' ] )
+        channel[ 'address' ] = address
+        channel[ 'instance' ] = c
+        self.channels[ channel[ 'name' ] ] = channel
+
+    def setup_holon( self, holon ):
+        pass
+
+    def setup_environment( self, env_spec ):
+        pass
+
+    def setup_execution( self, execution_plan ):
+        pass
+
+    async def execute_plan( self ):
+        if not self.execution_plan:
+            for c in self.channels.values():
+                await c[ 'instance' ].start()
+
+            for a in self.agents.values():
+                await a[ 'instance' ].start()
+
+    async def setup( self ):
+        super().setup()
+
+        bqn = self.QueryName()
+        bqn_template =  Template(
+            metadata={ "performative": "query-ref",
+                       "ontology": "APiQuery"
+            }
+        )
+        self.add_behaviour( bqn, bqn_template )
+        
+        self.say( self.channels )
+        self.say( self.agents )
+        await self.execute_plan()
+
+    class QueryName( CyclicBehaviour ):
+        async def run( self ):
+            msg = await self.receive( timeout=1 )
+            if msg:
+                if self.agent.verify( msg ):
+                    self.agent.say( 'Message verified, processing ...' )
+                    channel = msg.metadata[ 'channel' ]
+                    metadata = self.agent.query_message_template
+                    metadata[ 'in-reply-to' ] = msg.metadata[ 'reply-with' ]
+                    metadata[ 'agent' ] = channel
+
+                    try:
+                        ch_address = self.agent.channels[ channel ][ 'address' ]
+                        self.agent.say( 'Found channel', channel, 'address is', ch_address )
+
+                        metadata[ 'success' ] = 'true'
+                        metadata[ 'address' ] = ch_address
+                    except KeyError:
+                        self.agent.say( 'Channel', channel, 'not found' )
+                        metadata[ 'success' ] = 'false'
+                        metadata[ 'address' ] = 'null'
+                    self.agent.schedule_message( str( msg.sender ), metadata=metadata )
+                        
+                else:
+                    self.agent.say( 'Message could not be verified. IMPOSTER!!!!!!' )
+                    metadata = self.agent.refuse_message_template
+                    metadata[ 'in-reply-to' ] = msg.metadata[ 'reply-with' ]
+                    self.agent.schedule_message( str( msg.sender ), metadata=metadata )
+            
+        
 
 class APiRegistrationService:
     '''
@@ -1929,16 +2287,17 @@ class APiRegistrationService:
         url = "http://%s/register/%s/%s" % ( server, username, password )
         response = requests.get( url, verify=False )
 
+        host = server.split( ':' )[ 0 ]
         if response.status_code == 200:
             result = response.content.decode('utf-8')
             if result == 'OK':
-                return ( username, password )
+                return (  '%s@%s' % ( username, host ), password )
             else:
                 for i in range( self.MAX_RETRIES ):
                     response = requests.get( url, verify=False )
                     result = response.content.decode('utf-8')
                     if result == 'OK':
-                        return ( username, password )
+                        return ( '%s@%s' % ( username, host ), password )
                 raise XMPPRegisterException( 'Cannot register agent "%s" after %d retries, giving up. Error from server: %s' % ( username, self.MAX_RETRIES, result ) )
         else:
             raise XMPPRegisterException( 'Error while communicating with server at "%s"' % server )
@@ -2139,7 +2498,10 @@ class APi( APiListener ):
 
     # Enter a parse tree produced by APiParser#json.
     def enterJson(self, ctx:APiParser.JsonContext):
-        print( self.STACK[ -1 ] )
+        try:
+            print( ctx.children[ 0 ].getText() )
+        except:
+            pass
 
     # Exit a parse tree produced by APiParser#json.
     def exitJson(self, ctx:APiParser.JsonContext):
@@ -2455,14 +2817,37 @@ if __name__ == '__main__':
 
     # TESTING
     os.chdir('test')
-    '''rs = APiRegistrationService( 'APi-test' )
-    rs.register( 'ivek' )'''
+    rs = APiRegistrationService( 'APi-test' )
+    #a1, a1pass = rs.register( 'ivek' )
+    #a2, a2pass = rs.register( 'joza' )
+    #c1, c1pass = rs.register( 'stefica' )
+
+    #a = APiAgent( 'bla_stdin_stdout', a1 + '@rec.foi.hr', a1pass, flows=[ ( 'self', 'c' ) ] )
+    #b = APiAgent( 'bla_stdin_ws', a2 + '@rec.foi.hr', a2pass, flows=[ ( 'c', 'self' ) ] )
+    #c = APiChannel( 'c', c1 + '@rec.foi.hr', c1pass, channel_input='regex( x is (?P<act>[0-9]+) )', channel_output="{ 'action':?act, 'history':?act }" )
+
+    #ns[ 'agents' ][ 'a' ] = a
+    #ns[ 'agents' ][ 'b' ] = b
+    #ns[ 'channels' ][ 'c' ] = c
+
+    #c.start()
+
+    h1name, h1password = rs.register( 'holonko1' )
+    agents = [ { 'name':'bla_stdin_stdout', 'flows':[ ( 'self', 'c' ) ], 'args':None }, { 'name':'bla_stdin_ws', 'flows':[ ( 'c', 'self' ) ], 'args':None } ]
+    channels = [ { 'name':'c', 'input':'regex( x is (?P<act>[0-9]+) )', 'output':"{ 'action':?act, 'history':?act }", 'transformer':None } ]
+    environment = None
+    holons = []
+    execution_plan = None
+    print( h1name )
+    h1 = APiHolon( 'holonko1', h1name, h1password, agents, channels, environment, holons, execution_plan )
+    h1.start()
+    
 
     
-    a = APiAgent( 'bla_ws_ws', 'bla0agent@dragon.foi.hr', 'tajna', flows=[ ('a', 'self'), ('self', 'c'), ('d', 'e', 'NIL'), ('b','VOID') ] ) # ('STDIN', 'self'),  ('self', 'STDOUT'),
+    #a = APiAgent( 'bla_ws_ws', 'bla0agent@dragon.foi.hr', 'tajna', flows=[ ('a', 'self'), ('self', 'c'), ('d', 'e', 'NIL'), ('b','VOID') ] ) # ('STDIN', 'self'),  ('self', 'STDOUT'),
 
     
-    
+    '''
     sleep( 1 )
     a.input( 'avauhu\nguhu\nbuhu\nwuhu\ncuhu\n' )
     sleep( 1 )
@@ -2473,12 +2858,26 @@ if __name__ == '__main__':
     sleep( 1 )
     a.input( 'puhu\nluhu\n' )
     sleep( 1 )
-    a.input( '<!eof!>' )
+    a.input( '<!eof!>' )'''
     
     #a.start_shell_client( await_stdin=True, print_stdout=True, print_stderr=True )
     
 
-    #c = APiChannel( 'test', 'bla0agent@dragon.foi.hr', 'tajna', channel_input='regex( x is (?P<var>[0-9]+) )', channel_output="json( object( pair( 'string:action', Xact ) ) )" )
+    #c = APiChannel( 'test', 'bla0agent@dragon.foi.hr', 'tajna', channel_input='regex( x is (?P<act>[0-9]+) )', channel_output="{ 'action':?act, 'history':?act }" )
+
+    #print( c.map( 'x is 247 blakaka x is 222121' ) )
+
+    #c = APiChannel( 'test', 'bla0agent@dragon.foi.hr', 'tajna', channel_input='json( { "gugu":?y, "bla":?x } )', channel_output='<bla><nana x="?x" /><y>?y</y></bla>' )
+
+    #c.start()
+    
+    #print( c.map( '{ "bla":234, "gugu":1 }' ) )
+
+    
+    #c = APiChannel( 'test', 'bla0agent@dragon.foi.hr', 'tajna' ) # TRANSPARENT CHANNEL
+
+    #print( c.map( '{ "bla":234, "gugu":1 }' ) ) 
+    
     
     print( ns )
 
