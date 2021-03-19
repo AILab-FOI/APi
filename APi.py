@@ -1466,7 +1466,7 @@ class APiChannel( APiBaseAgent ):
     '''Channel agent.'''
 
     REPL_STR = '"$$$API_THIS_IS_VARIABLE_%s$$$"'
-    def __init__( self, channelname, name, password, holon, token, channel_input=None, channel_output=None, transformer=None ):
+    def __init__( self, channelname, name, password, holon, token, portrange, channel_input=None, channel_output=None, transformer=None ):
         self.channelname = channelname
         self.holon = holon
         super().__init__( name, password, token )
@@ -1476,6 +1476,11 @@ class APiChannel( APiBaseAgent ):
 
         self.senders = []
         self.receivers = []
+
+        self.min_port, self.max_port = portrange
+
+        self.attach_servers = []
+        self.subscribe_servers = []
 
         self.agree_message_template = {}
         self.agree_message_template[ 'performative' ] = 'agree'
@@ -1520,7 +1525,6 @@ class APiChannel( APiBaseAgent ):
                 self.input_re = re.compile( reg )
                 self.map = self.map_re
             elif self.input.startswith( 'json( ' ):
-                # TODO: Implement json
                 self.input_json = self.input[ 6:-2 ]
                 self.kb.query( 'use_module(library(http/json))' )
                 cp = self.input_json
@@ -1585,9 +1589,56 @@ class APiChannel( APiBaseAgent ):
         # TODO: Implement XML
         raise NotImplementedError( NIE )
 
-    def get_server( self ):
-        # TODO: Implement dynamic server creation
-        return 'localhost', '2709', 'tcp'
+    def get_free_port( self ):
+        sock = socket.socket( socket.AF_INET, socket.SOCK_STREAM )
+        port = self.min_port
+        while port <= self.max_port:
+            try:
+                sock.bind( ( '', port ) )
+                sock.close()
+                return port
+            except OSError:
+                port += 1
+        raise IOError( 'No free ports in range %d - %d' % ( self.min_port, self.max_port ) )
+
+    def get_ip( self ):
+        # TODO: Verify this works with outside network
+        #       addresses!
+        s = socket.socket( socket.AF_INET, socket.SOCK_DGRAM )
+        try:
+            # doesn't even have to be reachable
+            s.connect( ( '10.255.255.255', 1 ) )
+            IP = s.getsockname()[ 0 ]
+        except Exception:
+            IP = '127.0.0.1'
+        finally:
+            s.close()
+        return IP
+    
+    def get_server( self, srv_type ):
+        # TODO: Deal with TCP/UDP selection
+        port =  self.get_free_port()
+        host = self.get_ip()
+
+        self.say( host, port )
+
+        srv_created = False
+        while not srv_created:
+            try:
+                srv = nclib.TCPServer( ( '0.0.0.0', port ) )
+                srv_created = True
+            except OSError as e:
+                port = self.get_free_port()
+
+                
+        if srv_type == 'attach':
+            self.attach_servers.append( srv )
+        elif srv_type == 'subscribe':
+            self.subscribe_servers.append( srv )
+        else:
+            raise APiChannelDefinitionError( 'Unknown server type:', srv_type )
+        
+        return host, str( port ), 'tcp'
 
 
     class Subscribe( CyclicBehaviour ):
@@ -1603,7 +1654,7 @@ class APiChannel( APiBaseAgent ):
                     metadata[ 'agent' ] = self.agent.channelname
                     metadata[ 'type' ] = 'input'
 
-                    server, port, protocol = self.agent.get_server()
+                    server, port, protocol = self.agent.get_server( 'subscribe' )
                     metadata[ 'server' ] = server
                     metadata[ 'port' ] = port
                     metadata[ 'protocol' ] = protocol
@@ -1627,7 +1678,7 @@ class APiChannel( APiBaseAgent ):
                     metadata[ 'agent' ] = self.agent.channelname
                     metadata[ 'type' ] = 'output'
 
-                    server, port, protocol = self.agent.get_server()
+                    server, port, protocol = self.agent.get_server( 'attach' )
                     metadata[ 'server' ] = server
                     metadata[ 'port' ] = port
                     metadata[ 'protocol' ] = protocol
@@ -2279,7 +2330,7 @@ class APiHolon( APiTalkingAgent ):
 
     def setup_channel( self, channel ):
         address, password = self.registrar.register( channel[ 'name' ] )
-        c = APiChannel( channel[ 'name' ], address, password, self.address, self.token, channel_input=channel[ 'input' ], channel_output=channel[ 'output' ], transformer=channel[ 'transformer' ] )
+        c = APiChannel( channel[ 'name' ], address, password, self.address, self.token, ( self.registrar.min_port, self.registrar.max_port ), channel_input=channel[ 'input' ], channel_output=channel[ 'output' ], transformer=channel[ 'transformer' ] )
         channel[ 'address' ] = address
         channel[ 'instance' ] = c
         self.channels[ channel[ 'name' ] ] = channel
@@ -2383,7 +2434,6 @@ class APiRegistrationService:
         try:
             self.min_port = int( self.descriptor[ 'port-range' ][ 'min' ] )
             self.max_port = int( self.descriptor[ 'port-range' ][ 'max' ] )
-            print( self.min_port, self.max_port )
         except Exception as e:
             err = 'Holon configuration file has invalid format.\n' + str( e )
             raise APiHolonConfigurationError( err )
