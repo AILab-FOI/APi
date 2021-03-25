@@ -62,15 +62,18 @@ from spade.behaviour import OneShotBehaviour, CyclicBehaviour, FSMBehaviour, Sta
 from spade.template import Template
 from spade.message import Message
 from spade import quit_spade
+from aioxmpp.dispatcher import SimpleMessageDispatcher
 
 import requests
 # When using HTTPS with insecure servers this has to be uncommented
-#from requests.packages.urllib3.exceptions import InsecureRequestWarning
-#requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
+requests.packages.urllib3.disable_warnings( InsecureRequestWarning )
+import warnings
 
 import asyncio
 import aiofiles
 import aiohttp
+import concurrent.futures as cf
 import logging
 logging.getLogger( 'asyncio' ).setLevel( logging.CRITICAL )
 import websockets
@@ -78,6 +81,18 @@ import nclib
 import pexpect
 
 from pyxf.pyxf import swipl
+
+# Only for debug
+DEBUG = False
+TALK = True
+
+if DEBUG:
+    logging.basicConfig( level=logging.DEBUG )
+
+    from aiodebug import log_slow_callbacks, monitor_loop_lag
+    log_slow_callbacks.enable( 0.05 )
+    
+
 
 def error( *msg ):
     '''Function for printing error messages'''
@@ -134,8 +149,13 @@ class APiChannelDefinitionError( Exception ):
     pass
 
 class APiShellInitError( Exception ):
-    '''Esception thrown when shell server hasn't been initialized'''
+    '''Exception thrown when shell server hasn't been initialized'''
     pass
+
+class APiHTTPSWarning( Warning ):
+    '''Warning when HTTP is used instead of HTTPS'''
+    pass
+    
 
 class APiTalkingAgent( Agent ):
     '''
@@ -144,6 +164,8 @@ class APiTalkingAgent( Agent ):
     '''
     def __init__( self, name, password, token=None ):
         super().__init__( name, password )
+        #self.container.send = self.send
+        
         self.token = token
         if token:
             self.auth = hash( str( self.jid.bare() ) + self.token )
@@ -157,23 +179,32 @@ class APiTalkingAgent( Agent ):
 
         # Address book of other agents
         self.address_book = {}
+
+        self.LOG = logging.getLogger( 'APiAgent' )
     
     def say( self, *msg ):
-        print( '%s:' % self.name, *msg )
+        if TALK:
+            '''
+            out = [ '%s:' % self.name ]
+            out += [ i for i in msg ]
+            self.LOG.info( out )'''
+            print( '%s:' % self.name, *msg )
 
     def verify( self, msg ):
-        return verify( msg.metadata[ 'auth-token' ], str( msg.sender ) + self.token )
+        return verify( msg.metadata[ 'auth-token' ], str( msg.sender.bare() ) + self.token )
 
     def setup( self ):
-        oq = self.OutputQueue()
-        self.add_behaviour( oq )
+        self.behaviour_output = self.OutputQueue()
+        self.add_behaviour( self.behaviour_output )
         st = self.Stop()
         self.add_behaviour( st )
 
-    def schedule_message( self, to, body='', metadata={} ):
-        self.say( 'Scheduling message', metadata, to )
-        msg = Message( to=to, body=body, metadata=metadata )
-        self.output_buffer.append( msg )
+
+    async def schedule_message( self, to, body='', metadata={} ):
+        # TODO: See if this can be done in a more elegant way ...
+        msg = Message( to=to, body=body, metadata=deepcopy( metadata ) )
+        self.say( 'Sending message:', msg.metadata, msg.to )
+        await self.behaviour_output.send( deepcopy( msg ) )
         try:
             self.input_ack.add( msg.metadata[ 'reply-with' ] )
         except KeyError:
@@ -181,13 +212,12 @@ class APiTalkingAgent( Agent ):
 
     class OutputQueue( CyclicBehaviour ):
         async def run( self ):
-            while self.agent.output_buffer:
-                msg = self.agent.output_buffer.pop()
-                self.agent.say( 'Sending message:', msg.metadata, msg.to )
-                await self.send( deepcopy( msg ) )
+            pass
+
 
     class Stop( CyclicBehaviour ):
         # TODO: Test and validate this
+        #       Also look up async def stop in APiHolon
         async def run( self ):
             msg = await self.receive( timeout=0.1 )
             if msg:
@@ -1474,10 +1504,16 @@ class APiChannel( APiBaseAgent ):
         self.kb = swipl()
         self.var_re = re.compile( r'[\?][a-zA-Z][a-zA-Z0-9-_]*' )
 
-        self.senders = []
-        self.receivers = []
+        self.sender_agents = []
+        self.receiver_agents = []
 
         self.min_port, self.max_port = portrange
+        # TODO: This is a hardcoded delimiter for
+        #       messages that are forwarded through
+        #       the channel. Not an ideal solution.
+        #       It would be good to see if something
+        #       else would be better.
+        self.delimiter = '\n' 
 
         self.attach_servers = []
         self.subscribe_servers = []
@@ -1590,6 +1626,7 @@ class APiChannel( APiBaseAgent ):
         raise NotImplementedError( NIE )
 
     def get_free_port( self ):
+        '''Get a free port on the host'''
         sock = socket.socket( socket.AF_INET, socket.SOCK_STREAM )
         port = self.min_port
         while port <= self.max_port:
@@ -1602,6 +1639,7 @@ class APiChannel( APiBaseAgent ):
         raise IOError( 'No free ports in range %d - %d' % ( self.min_port, self.max_port ) )
 
     def get_ip( self ):
+        '''Get the current IP address of the agent'''
         # TODO: Verify this works with outside network
         #       addresses!
         s = socket.socket( socket.AF_INET, socket.SOCK_DGRAM )
@@ -1616,6 +1654,7 @@ class APiChannel( APiBaseAgent ):
         return IP
     
     def get_server( self, srv_type ):
+        '''Get a NetCat server for sending or receiving'''
         # TODO: Deal with TCP/UDP selection
         port =  self.get_free_port()
         host = self.get_ip()
@@ -1642,73 +1681,85 @@ class APiChannel( APiBaseAgent ):
 
 
     class Subscribe( CyclicBehaviour ):
-        '''Agent wants to listen to channel'''
+        '''Agent wants to listen or write to channel'''
         async def run( self ):
             msg = await self.receive( timeout=0.1 )
             if msg:
                 if self.agent.verify( msg ):
                     self.agent.say( '(Subscribe) Message verified, processing ...' )
-                    self.agent.receivers.append( str( msg.sender ) )
-                    metadata = self.agent.agree_message_template
+                    self.agent.receiver_agents.append( str( msg.sender ) )
+                    metadata = deepcopy( self.agent.agree_message_template )
                     metadata[ 'in-reply-to' ] = msg.metadata[ 'reply-with' ]
                     metadata[ 'agent' ] = self.agent.channelname
-                    metadata[ 'type' ] = 'input'
+                    if msg.metadata[ 'performative' ] == 'subscribe':
+                        metadata[ 'type' ] = 'input'
+                        server, port, protocol = self.agent.get_server( 'subscribe' )
+                    elif msg.metadata[ 'performative' ] == 'request':
+                        metadata[ 'type' ] = 'output'
+                        server, port, protocol = self.agent.get_server( 'attach' )
+                    else:
+                        self.agent.say( 'Unknown message' )
+                        metadata = self.agent.refuse_message_template
+                        metadata[ 'in-reply-to' ] = msg.metadata[ 'reply-with' ]
+                        metadata[ 'reason' ] = 'unknown-message'
+                        await self.agent.schedule_message( str( msg.sender ), metadata=metadata )
 
-                    server, port, protocol = self.agent.get_server( 'subscribe' )
+                    
                     metadata[ 'server' ] = server
                     metadata[ 'port' ] = port
                     metadata[ 'protocol' ] = protocol
-                    self.agent.schedule_message( str( msg.sender ), metadata=metadata )
+                    await self.agent.schedule_message( str( msg.sender ), metadata=metadata )
+                    await asyncio.sleep( 0.1 )
                 else:
                     self.agent.say( 'Message could not be verified. IMPOSTER!!!!!!' )
                     metadata = self.agent.refuse_message_template
                     metadata[ 'in-reply-to' ] = msg.metadata[ 'reply-with' ]
                     metadata[ 'reason' ] = 'security-policy'
-                    self.agent.schedule_message( str( msg.sender ), metadata=metadata )
-
-    class Attach( CyclicBehaviour ):
+                    await self.agent.schedule_message( str( msg.sender ), metadata=metadata )
+    class Forward( CyclicBehaviour ):
+        '''Receive inputs, map them to outputs and send to subscribers'''
+        # TODO: Test this behaviour
         async def run( self ):
-            msg = await self.receive( timeout=0.1 )
-            if msg:
-                if self.agent.verify( msg ):
-                    self.agent.say( '(Attach) Message verified, processing ...' )
-                    self.agent.senders.append( str( msg.sender ) )
-                    metadata = self.agent.agree_message_template
-                    metadata[ 'in-reply-to' ] = msg.metadata[ 'reply-with' ]
-                    metadata[ 'agent' ] = self.agent.channelname
-                    metadata[ 'type' ] = 'output'
 
-                    server, port, protocol = self.agent.get_server( 'attach' )
-                    metadata[ 'server' ] = server
-                    metadata[ 'port' ] = port
-                    metadata[ 'protocol' ] = protocol
-                    self.agent.schedule_message( str( msg.sender ), metadata=metadata )
-                else:
-                    self.agent.say( 'Message could not be verified. IMPOSTER!!!!!!' )
-                    metadata = self.agent.refuse_message_template
-                    metadata[ 'in-reply-to' ] = msg.metadata[ 'reply-with' ]
-                    metadata[ 'reason' ] = 'security-policy'
-                    self.agent.schedule_message( str( msg.sender ), metadata=metadata )
-
+            def iter_clients( srv ):
+                srv.sock.settimeout( 0.1 )
+                try:
+                    c, a = srv.sock.accept()
+                    client = nclib.Netcat( sock=c, server=a )
+                    yield client
+                    for client in srv:
+                        yield client
+                except Exception as e:
+                    return
+            
+            if self.agent.attach_servers:
+                for srv in self.agent.attach_servers:
+                    for client in iter_clients( srv ):
+                        print( 'CLIENT', client )
+                        result = client.recv_until( self.agent.delimiter, timeout=0.2 )
+                        print( 'RESULT', result )
+                        if result:
+                            msg = self.agent.map( result )
+                            print( 'MSG', msg )
+                            for srv_out in self.agent.subscribe_servers:
+                                print( 'OUT SERVER', srv_out )
+                                for client_out in srv_out:
+                                    print( 'OUT CLIENT', client_out )
+                                    client_out.sendline( msg )
                     
     async def setup(self):
         super().setup()
             
         bsubs = self.Subscribe()
         bsubs_template = Template(
-            metadata={ "performative": "subscribe",
+            metadata={ 
                        "ontology": "APiDataTransfer"
-            }
+            } # "performative": "subscribe",
         )      
         self.add_behaviour( bsubs, bsubs_template )
-            
-        batt = self.Attach()
-        batt_template = Template(
-            metadata={ "performative": "request",
-                       "ontology": "APiDataTransfer"
-            }
-        )      
-        self.add_behaviour( batt, batt_template )
+        
+        bfwd = self.Forward()
+        self.add_behaviour( bfwd )
 
 
 
@@ -1727,13 +1778,14 @@ class APiAgent( APiBaseAgent ):
         token - token from holon
         args - list of arguments (from APi statement)
         flows - list of message flows (from APi statement)
-        '''
+        '''        
         try:
             fh = open( agentname + '.ad' )
         except IOError as e:
             err = 'Missing agent definition file or permission issue.\n' + str( e )
             raise APiIOError( err )
         super().__init__( name, password, token )
+        
         self.agentname = agentname
         self.holon = holon
         self._load( fh )
@@ -1780,10 +1832,10 @@ class APiAgent( APiBaseAgent ):
         self.subscribe_msg_template[ 'ontology' ] = 'APiDataTransfer'
         self.subscribe_msg_template[ 'auth-token' ] = self.auth
 
-        self.writeto_msg_template = {}
-        self.writeto_msg_template[ 'performative' ] = 'request'
-        self.writeto_msg_template[ 'ontology' ] = 'APiDataTransfer'
-        self.writeto_msg_template[ 'auth-token' ] = self.auth
+        self.attach_msg_template = {}
+        self.attach_msg_template[ 'performative' ] = 'request'
+        self.attach_msg_template[ 'ontology' ] = 'APiDataTransfer'
+        self.attach_msg_template[ 'auth-token' ] = self.auth
 
         for i in self.input_channels:
             try:
@@ -1981,7 +2033,6 @@ class APiAgent( APiBaseAgent ):
         self.shell_socket_stdin.listen( 0 )
         self.shell_ip_stdin, self.shell_port_stdin = self.shell_socket_stdin.getsockname()
 
-        print( self.shell_ip_stdin, self.shell_port_stdin )
         self.shell_client_stdin, self.shell_client_stdin_addr = self.shell_socket_stdin.accept()
 
         if prompt:
@@ -2016,7 +2067,6 @@ class APiAgent( APiBaseAgent ):
                     threads.append( t )
                 error = False                                
             except Exception as e:
-                #print( e )
                 error = True
                 sleep( 0.1 )
 
@@ -2035,7 +2085,6 @@ class APiAgent( APiBaseAgent ):
         self.shell_socket_stdout.listen( 0 )
         self.shell_ip_stdout, self.shell_port_stdout = self.shell_socket_stdout.getsockname()
 
-        print( self.shell_ip_stdout, self.shell_port_stdout )
         self.shell_client_stdout, self.shell_client_stdout_addr = self.shell_socket_stdout.accept()
 
         BUFFER_SIZE = 1024
@@ -2124,7 +2173,6 @@ class APiAgent( APiBaseAgent ):
                 cmd += ' --output'
             elif print_stderr:
                 cmd += ' --error'
-            #print( cmd )
             self.shell_client_proc = pexpect.spawn( cmd )
 
             def output_filter( s ):
@@ -2139,99 +2187,114 @@ class APiAgent( APiBaseAgent ):
         elif print_stdout or print_stderr:
             self.shell_stdout_thread.join()
 
+    def get_channel_name( self, address ):
+        '''Ugly hack'''
+        return list( self.address_book.keys() )[ list( self.address_book.values() ).index( address ) ]
+
     async def connect_input( self, channel, server_info ):
         # TODO: start netcat client to connect to server
         #       and pipe input into where needed (e.g.
         #       self, void, stdout, forward channel ... )
         self.say( 'Connecting input channel %s with' % channel, server_info )
+        chname = self.get_channel_name( channel )
+        self.say( 'Channel name is', chname )
 
     async def connect_output( self, channel, server_info ):
         # TODO: start netcat client to connect to server
         #       and pipe output to it
         self.say( 'Connecting output channel %s to' % channel, server_info )
-            
-    async def setup( self ):
-        super().setup()
-        bqc = self.ConnectChannels()
-        self.add_behaviour( bqc )
+        chname = self.get_channel_name( channel )
+        self.say( 'Channel name is', chname )
 
-        bstc = self.QueryChannels()
-        bstc_template = Template(
+        
+    async def setup( self ):        
+        super().setup()
+        
+        self.behaviour_gca = self.GetChannelAdresses()
+        self.add_behaviour( self.behaviour_gca )
+
+        self.behaviour_stic = self.SubscribeToInputChannels()
+        self.add_behaviour( self.behaviour_stic )
+
+        self.behaviour_atoc = self.AttachToOutputChannels()
+        self.add_behaviour( self.behaviour_atoc )
+        
+        self.behaviour_qc = self.QueryChannels()
+        bqc_template = Template(
             metadata={ "ontology": "APiQuery" }
         )
-        self.add_behaviour( bstc, bstc_template )
+        self.add_behaviour( self.behaviour_qc, bqc_template )
 
-        bsc = self.SetupChannels()
-        bsc_template = Template(
-            metadata={ "ontology": "APiDataTransfer" }
+        bsic = self.SetupInputChannels()
+        bsic_template = Template(
+            metadata={ "ontology": "APiDataTransfer", "type":"input" }
         )
-        self.add_behaviour( bsc, bsc_template )
+        self.add_behaviour( bsic, bsic_template )
 
-    class ConnectChannels( OneShotBehaviour ):
+        bsoc = self.SetupOutputChannels()
+        bsoc_template = Template(
+            metadata={ "ontology": "APiDataTransfer", "type":"output" }
+        )
+        self.add_behaviour( bsoc, bsoc_template )
+        
+
+    class GetChannelAdresses( OneShotBehaviour ):
         async def run( self ):
+            self.agent.say( 'Inputs:', self.agent.input_channel_query_buffer )
             for inp in self.agent.input_channel_query_buffer:
                 metadata = self.agent.query_msg_template
                 metadata[ 'reply-with' ] = str( uuid4().hex )
                 metadata[ 'channel' ] = inp
-                self.agent.schedule_message( self.agent.holon, metadata=metadata )
-                while True:
-                    try:
-                        channel = self.agent.address_book[ inp ]
-                        break
-                    except KeyError:
-                        await asyncio.sleep( 0.1 )
-                
-                metadata = self.agent.subscribe_msg_template
-                metadata[ 'reply-with' ] = str( uuid4().hex )
-                self.agent.schedule_message( channel, metadata=metadata )
+                await self.agent.schedule_message( self.agent.holon, metadata=metadata )
 
-                while True:
-                    try:
-                        server_info =  self.agent.input_channel_servers[ inp ]
-                        break
-                    except KeyError:
-                        await asyncio.sleep( 0.1 )
-
-                await self.agent.connect_input( channel, server_info )
-                
+            self.agent.say( 'Outputs:', self.agent.output_channel_query_buffer )    
             for out in self.agent.output_channel_query_buffer:
+                self.agent.say( 'Looking up channel', out, 'in addressbook' )
                 try:
                     channel = self.agent.address_book[ out ]
+                    self.agent.say( 'Got channel', out, 'address', channel )
+                    await asyncio.sleep( 0.1 )
                 except KeyError:
+                    self.agent.say( 'Could not find channel', out, 'in address book, querying' )
                     metadata = self.agent.query_msg_template
                     metadata[ 'reply-with' ] = str( uuid4().hex )
                     metadata[ 'channel' ] = out
-                    self.agent.schedule_message( self.agent.holon, metadata=metadata )
-                    while True:
-                        try:
-                            channel = self.agent.address_book[ out ]
-                            break
-                        except KeyError:
-                            await asyncio.sleep( 0.1 )
-                
-                metadata = self.agent.writeto_msg_template
+                    await self.agent.schedule_message( self.agent.holon, metadata=metadata )
+
+    class SubscribeToInputChannels( OneShotBehaviour ):
+        async def run( self ):
+            await self.agent.behaviour_gca.join()
+            self.agent.say( 'Subscribing to inputs:', self.agent.input_channel_query_buffer )
+            for inp in self.agent.input_channel_query_buffer:
+                while inp not in self.agent.address_book:
+                    await asyncio.sleep( 0.1 )
+                channel = self.agent.address_book[ inp ]
+                metadata = self.agent.subscribe_msg_template
                 metadata[ 'reply-with' ] = str( uuid4().hex )
-                self.agent.schedule_message( channel, metadata=metadata )
+                await self.agent.schedule_message( channel, metadata=metadata )
 
-                while True:
-                    try:
-                        server_info =  self.agent.output_channel_servers[ out ]
-                        break
-                    except KeyError:
-                        await asyncio.sleep( 0.1 )
-
-                await self.agent.connect_output( channel, server_info )
+    class AttachToOutputChannels( OneShotBehaviour ):
+        async def run( self ):
+            await self.agent.behaviour_stic.join()
+            self.agent.say( 'Attaching to outputs', self.agent.output_channel_query_buffer )
+            
+            for out in self.agent.output_channel_query_buffer:
+                while out not in self.agent.address_book:
+                    await asynicio.sleep( 0.1 )
+                channel = self.agent.address_book[ out ]
+                metadata = self.agent.attach_msg_template
+                metadata[ 'reply-with' ] = str( uuid4().hex )
+                await self.agent.schedule_message( channel, metadata=metadata )
+        
     
 
-
     class QueryChannels( CyclicBehaviour ):
-        '''Asko holon for channel addresses'''
+        '''Ask holon for channel addresses'''
         async def run( self ):
             msg = await self.receive( timeout=0.1 )
             if msg:
                 if self.agent.verify( msg ):
                     self.agent.say( '(QueryChannels) Message verified, processing ...' )
-                    self.agent.say( msg.to )
                     channel = msg.metadata[ 'address' ]
                     try:
                         self.agent.input_ack.remove( msg.metadata[ 'in-reply-to' ] )
@@ -2249,13 +2312,14 @@ class APiAgent( APiBaseAgent ):
                         self.agent.say( 'I have no memory of this message (%s). (awkward Gandalf look)' % msg.metadata[ 'in-reply-to' ] )           
                 else:
                     self.agent.say( 'Message could not be verified. IMPOSTER!!!!!!' )
-
-    class SetupChannels( CyclicBehaviour ):
+                
+    class SetupInputChannels( CyclicBehaviour ):
         async def run( self ):
-            msg = await self.receive( timeout=0.1 )
+            await self.agent.behaviour_atoc.join()
+            msg = await self.receive( timeout=1 )
             if msg:
                 if self.agent.verify( msg ):
-                    self.agent.say( '(SetupChannels) Message verified, processing ...' )
+                    self.agent.say( '(SetupInputChannels) Message verified, processing ...' )
                     try:
                         self.agent.input_ack.remove( msg.metadata[ 'in-reply-to' ] )
                         if msg.metadata[ 'performative' ] == 'refuse':
@@ -2263,13 +2327,8 @@ class APiAgent( APiBaseAgent ):
                             self.kill()
                         else:
                             channel = msg.metadata[ 'agent' ]
-                            if msg.metadata[ 'type' ] == 'input':
-                                servers = self.agent.input_channel_servers
-                            elif msg.metadata[ 'type' ] == 'output':
-                                servers = self.agent.output_channel_servers
-                            else:
-                                self.agent.say( 'Error connecting to channel address, unknown channel type ' + msg.metadata[ 'type' ] )
-                                self.kill()
+                            servers = self.agent.input_channel_servers
+                            self.agent.say( '(SetupInputChannels) Setting up', msg.metadata[ 'type' ], 'channel', channel )
                             servers[ channel ] = {}
                             servers[ channel ][ 'server' ] = msg.metadata[ 'server' ]
                             servers[ channel ][ 'port' ] = msg.metadata[ 'port' ]
@@ -2279,6 +2338,33 @@ class APiAgent( APiBaseAgent ):
                         self.agent.say( 'I have no memory of this message (%s). (awkward Gandalf look)' % msg.metadata[ 'in-reply-to' ])
                 else:
                     self.agent.say( 'Message could not be verified. IMPOSTER!!!!!!' )
+
+    class SetupOutputChannels( CyclicBehaviour ):
+        async def run( self ):
+            await self.agent.behaviour_atoc.join()
+            msg = await self.receive( timeout=1 )
+            if msg:
+                if self.agent.verify( msg ):
+                    self.agent.say( '(SetupOutputChannels) Message verified, processing ...' )
+                    try:
+                        self.agent.input_ack.remove( msg.metadata[ 'in-reply-to' ] )
+                        if msg.metadata[ 'performative' ] == 'refuse':
+                            self.agent.say( 'Error connecting to channel address due to ' + msg.metadata[ 'reason' ] )
+                            self.kill()
+                        else:
+                            channel = msg.metadata[ 'agent' ]
+                            servers = self.agent.output_channel_servers
+                            self.agent.say( '(SetupOutputChannels) Setting up', msg.metadata[ 'type' ], 'channel', channel )
+                            servers[ channel ] = {}
+                            servers[ channel ][ 'server' ] = msg.metadata[ 'server' ]
+                            servers[ channel ][ 'port' ] = msg.metadata[ 'port' ]
+                            servers[ channel ][ 'protocol' ] = msg.metadata[ 'protocol' ]
+                        
+                    except KeyError:
+                        self.agent.say( 'I have no memory of this message (%s). (awkward Gandalf look)' % msg.metadata[ 'in-reply-to' ])
+                else:
+                    self.agent.say( 'Message could not be verified. IMPOSTER!!!!!!' )
+
         
 class APiHolon( APiTalkingAgent ):
     '''A holon created by an .api file.'''
@@ -2308,6 +2394,8 @@ class APiHolon( APiTalkingAgent ):
         self.execution_plan = None
         self.setup_execution( execution_plan )
 
+        self.execute_plan()
+
         self.query_message_template = {}
         self.query_message_template[ 'performative' ] = 'inform-ref'
         self.query_message_template[ 'ontology' ] = 'APiQuery'
@@ -2322,35 +2410,72 @@ class APiHolon( APiTalkingAgent ):
         
 
     def setup_agent( self, agent ):
+        '''TODO: This method should create and start an agent 
+                 depending on type (local Unix, Docker, other 
+                 container ...). If it is a container type
+                 there should be a possibility to schedule it
+                 directly on some orchestration platform (i.e.
+                 Kubernetes, Docker Swarm or similar). This should
+                 be specified in the agent definition file (.ag).'''
+        self.say( 'Registering agent', agent[ 'name' ] )
         address, password = self.registrar.register( agent[ 'name' ] )
-        a = APiAgent( agent[ 'name' ], address, password, self.address, self.token, agent[ 'args' ], agent[ 'flows' ] )
+        agent[ 'cmd' ] = 'python3 ../agent.py "%s" "%s" "%s" "%s" "%s" "%s" "%s"' % ( agent[ 'name' ], address, password, self.address, self.token, json.dumps( agent[ 'args' ] ).replace('"','\\"'), json.dumps( agent[ 'flows' ] ).replace('"','\\"') )
         agent[ 'address' ] = address
-        agent[ 'instance' ] = a
         self.agents[ agent[ 'name' ] ] = agent
 
     def setup_channel( self, channel ):
+        ''' TODO: Same as above, it should be possible to 
+                  create channels in an orchestration platform
+                  if specified in the channel definition file.'''
         address, password = self.registrar.register( channel[ 'name' ] )
-        c = APiChannel( channel[ 'name' ], address, password, self.address, self.token, ( self.registrar.min_port, self.registrar.max_port ), channel_input=channel[ 'input' ], channel_output=channel[ 'output' ], transformer=channel[ 'transformer' ] )
+        self.say( 'Registering channel', channel[ 'name' ] )
+        channel[ 'cmd' ] = 'python3 ../channel.py "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s"' % ( channel[ 'name' ], address, password, self.address, self.token, json.dumps( ( self.registrar.min_port, self.registrar.max_port ) ), json.dumps( channel[ 'input' ] ).replace('"','\\"'), json.dumps( channel[ 'output' ] ).replace('"','\\"'), json.dumps( channel[ 'transformer' ] ).replace('"','\\"') )
         channel[ 'address' ] = address
-        channel[ 'instance' ] = c
         self.channels[ channel[ 'name' ] ] = channel
 
     def setup_holon( self, holon ):
+        # TODO: implement starting included holons
         pass
 
     def setup_environment( self, env_spec ):
+        # TODO: implement setting up environment
+        #       channels (input + output)
         pass
 
     def setup_execution( self, execution_plan ):
+        # TODO: Design and implement execution plans
         pass
 
-    async def execute_plan( self ):
+    def execute_plan( self ):
+        
         if not self.execution_plan:
+            def start( cmd ):
+                return sp.Popen( cmd, stderr=sp.STDOUT, start_new_session=True )
+            
             for c in self.channels.values():
-                await c[ 'instance' ].start()
-
+                cmd = shlex.split( c[ 'cmd' ] )
+                print( 'Running channel with:', cmd )
+                c[ 'instance' ] = Thread( target=start, args=( cmd, ) )
+                c[ 'instance' ].start()
+                
             for a in self.agents.values():
-                await a[ 'instance' ].start()
+                cmd = shlex.split( a[ 'cmd' ] )
+                print( 'Running agent with:', cmd )
+                a[ 'instance' ] = Thread( target=start, args=( cmd, ) )
+                a[ 'instance' ].start()
+
+    async def stop( self ):
+        # TODO: implement stopping all agents
+        #       and channels by sending them
+        #       stopping messages.
+        for c in self.channels.values():
+            c[ 'instance' ].join()
+            
+        for a in self.agents.values():
+            a[ 'instance' ].join()
+
+        super().stop()
+        
 
     async def setup( self ):
         super().setup()
@@ -2365,7 +2490,6 @@ class APiHolon( APiTalkingAgent ):
         
         self.say( self.channels )
         self.say( self.agents )
-        await self.execute_plan()
 
     class QueryName( CyclicBehaviour ):
         async def run( self ):
@@ -2388,17 +2512,14 @@ class APiHolon( APiTalkingAgent ):
                         self.agent.say( 'Channel', channel, 'not found' )
                         metadata[ 'success' ] = 'false'
                         metadata[ 'address' ] = 'null'
-                    self.agent.schedule_message( str( msg.sender ), metadata=metadata )
+                    await self.agent.schedule_message( str( msg.sender ), metadata=metadata )
                         
                 else:
                     self.agent.say( 'Message could not be verified. IMPOSTER!!!!!!' )
                     metadata = self.agent.refuse_message_template
                     metadata[ 'in-reply-to' ] = msg.metadata[ 'reply-with' ]
-                    self.agent.schedule_message( str( msg.sender ), metadata=metadata )
-                    
-            
-        
-
+                    await self.agent.schedule_message( str( msg.sender ), metadata=metadata )
+               
 class APiRegistrationService:
     '''
     Registration service which generates unique agent names
@@ -2443,8 +2564,13 @@ class APiRegistrationService:
         server = self.next()
         username = '%s_%s_%s' % ( self.name, name, str( uuid4().hex ) )
         password = str( uuid4().hex )
-        url = "http://%s/register/%s/%s" % ( server, username, password )
-        response = requests.get( url, verify=False )
+        url = "https://%s/register/%s/%s" % ( server, username, password )
+        try:
+            response = requests.get( url, verify=False )
+        except requests.exceptions.ConnectionError as e:
+            warnings.warn( 'Falling back to registering over insecure HTTP instead of HTTPS', APiHTTPSWarning )
+            url = "http://%s/register/%s/%s" % ( server, username, password )
+            response = requests.get( url, verify=False )
 
         host = server.split( ':' )[ 0 ]
         if response.status_code == 200:
