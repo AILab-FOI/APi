@@ -177,6 +177,14 @@ class APiTalkingAgent( Agent ):
         # Input acknowledgement set for messages that are awaitng a reply
         self.input_ack = set()
 
+        
+        # TODO: This is a hardcoded delimiter for
+        #       messages that are forwarded through
+        #       the channel. Not an ideal solution.
+        #       It would be good to see if something
+        #       else would be better.
+        self.delimiter = '\n' 
+
         # Address book of other agents
         self.address_book = {}
 
@@ -269,6 +277,8 @@ class APiBaseAgent( APiTalkingAgent ):
         Coroutine reading file and calling callback method.
         file_path - file path to be read from
         '''
+        while not self.all_setup():
+            await asyncio.sleep( 0.1 )
         file_empty = True
         while file_empty:
             async with aiofiles.open( file_path, mode='r' ) as f:
@@ -307,11 +317,14 @@ class APiBaseAgent( APiTalkingAgent ):
         not_timeout = True
         while error:
             try:
+                #print( '(read_ws) CONNECTING TO', url )
                 async with websockets.connect( url ) as websocket:
+                    #print( '(read_ws) CONNECTED TO WS', url )
                     not_timeout = True
                     while not_timeout:
                         try:
                             resp = await asyncio.wait_for( websocket.recv(), timeout=0.1 )
+                            print( '(read_ws) JUST READ', resp )
                             if self.output_delimiter:
                                 res = [ i for i in resp.split( self.output_delimiter ) if i ]
                             else:
@@ -380,6 +393,7 @@ class APiBaseAgent( APiTalkingAgent ):
                     buf = f'{ i }\n'.encode()
 
                     try:
+                        #print( '(write_stdin) WRITING', buf )
                         stdin.write( buf )
                         await stdin.drain()
                         await asyncio.sleep( 0.1 )
@@ -417,6 +431,8 @@ class APiBaseAgent( APiTalkingAgent ):
         File to STDOUT/STDERR coroutine
         cmd - command to be started as service
         '''
+        while not self.all_setup():
+            await asyncio.sleep( 0.1 )
         proc = await asyncio.create_subprocess_shell(
             cmd,
             stdout=asyncio.subprocess.PIPE,
@@ -433,6 +449,7 @@ class APiBaseAgent( APiTalkingAgent ):
         STDIN input method
         data - data to be written to STDIN
         '''
+        print( 'JUST GOT', data )
         if self.input_value_type == 'BINARY':
             data = data.encode( 'utf-8' )
 
@@ -440,8 +457,10 @@ class APiBaseAgent( APiTalkingAgent ):
             inp = [ i for i in data.split( self.input_delimiter ) if i ]
         else:
             inp = [ data ]
-            
+
+        print( 'INP IS NOW', inp )
         self.BUFFER.extend( inp )
+        print( 'BUFFER IS NOW', self.BUFFER )
 
         if data == self.input_end:
             self.service_quit( 'Got end delimiter on STDIN, quitting!' )
@@ -449,6 +468,8 @@ class APiBaseAgent( APiTalkingAgent ):
 
     
     async def input_stdin_run( self, cmd ):
+        while not self.all_setup():
+            await asyncio.sleep( 0.1 )
         proc = await asyncio.create_subprocess_shell(
             cmd,
             stdin=asyncio.subprocess.PIPE,
@@ -461,6 +482,8 @@ class APiBaseAgent( APiTalkingAgent ):
             self.write_stdin( proc.stdin ) )
 
     async def input_stdinfile_run( self, cmd, file_path ):
+        while not self.all_setup():
+            await asyncio.sleep( 0.1 )
         proc = await asyncio.create_subprocess_shell(
             cmd,
             stdin=asyncio.subprocess.PIPE )
@@ -471,6 +494,8 @@ class APiBaseAgent( APiTalkingAgent ):
 
 
     async def input_stdinhttp_run( self, cmd, url ):
+        while not self.all_setup():
+            await asyncio.sleep( 0.1 )
         proc = await asyncio.create_subprocess_shell(
             cmd,
             stdin=asyncio.subprocess.PIPE,
@@ -491,11 +516,14 @@ class APiBaseAgent( APiTalkingAgent ):
             pass
 
     async def input_stdinws_run( self, cmd, url ):
+        while not self.all_setup():
+            await asyncio.sleep( 0.1 )
         proc = await asyncio.create_subprocess_shell(
             cmd,
             stdin=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.DEVNULL )
+
 
         await asyncio.gather(
             self.write_stdin( proc.stdin ),
@@ -511,6 +539,8 @@ class APiBaseAgent( APiTalkingAgent ):
             pass
 
     async def input_stdinnc_run( self, cmd, host, port, udp ):
+        while not self.all_setup():
+            await asyncio.sleep( 0.1 )
         proc = await asyncio.create_subprocess_shell(
             cmd,
             stdin=asyncio.subprocess.PIPE,
@@ -532,6 +562,8 @@ class APiBaseAgent( APiTalkingAgent ):
             pass
 
     async def input_filefile_run( self, cmd, file_path ):
+        while not self.all_setup():
+            await asyncio.sleep( 0.1 )
         proc = await asyncio.create_subprocess_shell(
             cmd,
             stdin=asyncio.subprocess.PIPE )
@@ -539,6 +571,8 @@ class APiBaseAgent( APiTalkingAgent ):
         await asyncio.gather( self.read_file( file_path ) )
 
     async def input_filehttp_run( self, cmd, file_path, url ):
+        while not self.all_setup():
+            await asyncio.sleep( 0.1 )
         proc = await asyncio.create_subprocess_shell(
             cmd,
             stdin=asyncio.subprocess.PIPE,
@@ -557,6 +591,8 @@ class APiBaseAgent( APiTalkingAgent ):
             pass
 
     async def input_filews_run( self, cmd, file_path, url ):
+        while not self.all_setup():
+            await asyncio.sleep( 0.1 )
         proc = await asyncio.create_subprocess_shell(
             cmd,
             stdin=asyncio.subprocess.PIPE,
@@ -575,6 +611,8 @@ class APiBaseAgent( APiTalkingAgent ):
             pass
 
     async def input_filenc_run( self, cmd, file_path ):
+        while not self.all_setup():
+            await asyncio.sleep( 0.1 )
         proc = await asyncio.create_subprocess_shell(
             cmd,
             stdin=asyncio.subprocess.PIPE,
@@ -592,6 +630,8 @@ class APiBaseAgent( APiTalkingAgent ):
             pass
 
     async def input_httpstdout_run( self, cmd ):
+        while not self.all_setup():
+            await asyncio.sleep( 0.1 )
         proc = await asyncio.create_subprocess_shell(
             cmd,
             stderr=asyncio.subprocess.PIPE,
@@ -613,6 +653,8 @@ class APiBaseAgent( APiTalkingAgent ):
             pass
 
     async def input_httphttp_run( self, cmd, url ):
+        while not self.all_setup():
+            await asyncio.sleep( 0.1 )
         proc = await asyncio.create_subprocess_shell(
             cmd,
             stdout=asyncio.subprocess.DEVNULL,
@@ -637,6 +679,8 @@ class APiBaseAgent( APiTalkingAgent ):
     
 
     async def input_httpfile_run( self, cmd, file_path ):
+        while not self.all_setup():
+            await asyncio.sleep( 0.1 )
         proc = await asyncio.create_subprocess_shell(
             cmd )
 
@@ -654,6 +698,8 @@ class APiBaseAgent( APiTalkingAgent ):
             pass
 
     async def input_httpws_run( self, cmd, url ):
+        while not self.all_setup():
+            await asyncio.sleep( 0.1 )
         proc = await asyncio.create_subprocess_shell(
             cmd )
         
@@ -669,6 +715,8 @@ class APiBaseAgent( APiTalkingAgent ):
             pass
 
     async def input_httpnc_run( self, cmd ):
+        while not self.all_setup():
+            await asyncio.sleep( 0.1 )
         proc = await asyncio.create_subprocess_shell(
             cmd,
             stdin=asyncio.subprocess.PIPE,
@@ -716,6 +764,8 @@ class APiBaseAgent( APiTalkingAgent ):
                 return
 
     async def input_wsstdout_run( self, cmd ):
+        while not self.all_setup():
+            await asyncio.sleep( 0.1 )
         proc = await asyncio.create_subprocess_shell(
             cmd,
             stderr=asyncio.subprocess.PIPE,
@@ -736,6 +786,8 @@ class APiBaseAgent( APiTalkingAgent ):
 
 
     async def input_wsfile_run( self, cmd, file_path ):
+        while not self.all_setup():
+            await asyncio.sleep( 0.1 )
         proc = await asyncio.create_subprocess_shell(
             cmd )
 
@@ -751,6 +803,8 @@ class APiBaseAgent( APiTalkingAgent ):
             pass
 
     async def input_wshttp_run( self, cmd, url ):
+        while not self.all_setup():
+            await asyncio.sleep( 0.1 )
         proc = await asyncio.create_subprocess_shell(
             cmd,
             stdin=asyncio.subprocess.PIPE,
@@ -769,6 +823,8 @@ class APiBaseAgent( APiTalkingAgent ):
             pass
 
     async def input_wsws_run( self, cmd, url ):
+        while not self.all_setup():
+            await asyncio.sleep( 0.1 )
         proc = await asyncio.create_subprocess_shell(
             cmd,
             stdout=asyncio.subprocess.DEVNULL,
@@ -791,6 +847,8 @@ class APiBaseAgent( APiTalkingAgent ):
             pass
 
     async def input_wsnc_run( self, cmd ):
+        while not self.all_setup():
+            await asyncio.sleep( 0.1 )
         proc = await asyncio.create_subprocess_shell(
             cmd,
             stdin=asyncio.subprocess.PIPE,
@@ -845,6 +903,8 @@ class APiBaseAgent( APiTalkingAgent ):
                 sleep( 0.2 )
 
     async def input_ncstdout_run( self, cmd ):
+        while not self.all_setup():
+            await asyncio.sleep( 0.1 )
         proc = await asyncio.create_subprocess_shell(
             cmd,
             stderr=asyncio.subprocess.PIPE,
@@ -864,6 +924,8 @@ class APiBaseAgent( APiTalkingAgent ):
             pass
 
     async def input_ncfile_run( self, cmd, file_path ):
+        while not self.all_setup():
+            await asyncio.sleep( 0.1 )
         proc = await asyncio.create_subprocess_shell(
             cmd )
 
@@ -879,6 +941,8 @@ class APiBaseAgent( APiTalkingAgent ):
             pass
 
     async def input_nchttp_run( self, cmd, url ):
+        while not self.all_setup():
+            await asyncio.sleep( 0.1 )
         proc = await asyncio.create_subprocess_shell(
             cmd,
             stdin=asyncio.subprocess.PIPE,
@@ -897,6 +961,8 @@ class APiBaseAgent( APiTalkingAgent ):
             pass
 
     async def input_ncws_run( self, cmd, url ):
+        while not self.all_setup():
+            await asyncio.sleep( 0.1 )
         proc = await asyncio.create_subprocess_shell(
             cmd )
         
@@ -912,6 +978,8 @@ class APiBaseAgent( APiTalkingAgent ):
             pass
 
     async def input_ncnc_run( self, cmd ):
+        while not self.all_setup():
+            await asyncio.sleep( 0.1 )
         proc = await asyncio.create_subprocess_shell(
             cmd,
             stdin=asyncio.subprocess.PIPE,
@@ -963,6 +1031,76 @@ class APiBaseAgent( APiTalkingAgent ):
     def output_callback( self, data ):
         err = 'Trying to call output_callback directly from APiBaseAgent. This method should be overriden!'
         raise APiCallbackException( err )
+
+    def service_start( self ):
+        '''
+        Start main thread dealing with service input/output.
+        '''
+        try:
+            if self.stdinout_thread:
+                self.stdinout_thread.start()
+            if self.stdinfile_thread:
+                self.stdinfile_thread.start()
+            if self.stdinhttp_thread:
+                self.stdinhttp_thread.start()
+            if self.stdinws_thread:
+                self.stdinws_thread.start()
+            if self.stdinnc_thread:
+                self.stdinnc_thread.start()
+            if self.stdinncrec_thread:
+                self.stdinncrec_thread.start()
+            if self.filestdout_thread:
+                self.filestdout_thread.start()
+            if self.filefile_thread:
+                self.filefile_thread.start()
+            if self.filehttp_thread:
+                self.filehttp_thread.start()
+            if self.filews_thread:
+                self.filews_thread.start()
+            if self.filenc_thread:
+                self.filenc_thread.start()
+            if self.filencrec_thread:
+                self.filencrec_thread.start()
+            if self.nc_output_thread:
+                self.nc_output_thread.start()
+            if self.httpstdout_thread:
+                self.httpstdout_thread.start()
+            if self.httpfile_thread:
+                self.httpfile_thread.start()
+            if self.httphttp_thread:
+                self.httphttp_thread.start()
+            if self.httpws_thread:
+                self.httpws_thread.start()
+            if self.httpnc_thread:
+                self.httpnc_thread.start()
+            if self.httpncrec_thread:
+                self.httpncrec_thread.start()
+            if self.wsstdout_thread:
+                self.wsstdout_thread.start()
+            if self.wsfile_thread:
+                self.wsfile_thread.start()
+            if self.wshttp_thread:
+                self.wshttp_thread.start()
+            if self.wsws_thread:
+                self.wsws_thread.start()
+            if self.wsnc_thread:
+                self.wsnc_thread.start()
+            if self.wsncrec_thread:
+                self.wsncrec_thread.start()
+            if self.ncstdout_thread:
+                self.ncstdout_thread.start()
+            if self.ncfile_thread:
+                self.ncfile_thread.start()
+            if self.nchttp_thread:
+                self.nchttp_thread.start()
+            if self.ncws_thread:
+                self.ncws_thread.start()
+            if self.ncnc_thread:
+                self.ncnc_thread.start()
+            if self.ncncrec_thread:
+                self.ncncrec_thread.start()
+        except Exception as e:
+            pass
 
     def service_quit( self, msg='' ):
         '''
@@ -1140,7 +1278,7 @@ class APiBaseAgent( APiTalkingAgent ):
 
             self.BUFFER = []
             self.stdinout_thread = Thread( target=asyncio.run, args=( self.input_stdin_run( self.cmd ), ) )
-            self.stdinout_thread.start()
+            #self.stdinout_thread.start()
         elif self.input_type == 'STDIN' and self.output_type[ :4 ] == 'FILE':
             fl = file_re.findall( self.output_type )[ 0 ]
             self.output_file_path = fl
@@ -1149,7 +1287,7 @@ class APiBaseAgent( APiTalkingAgent ):
 
             self.BUFFER = []
             self.stdinfile_thread = Thread( target=asyncio.run, args=( self.input_stdinfile_run( self.cmd, fl ), ) )
-            self.stdinfile_thread.start()
+            #self.stdinfile_thread.start()
         elif self.input_type == 'STDIN' and self.output_type[ :4 ] == 'HTTP':
             url = http_re.findall( self.output_type )[ 0 ]
             self.output_url = url
@@ -1157,7 +1295,7 @@ class APiBaseAgent( APiTalkingAgent ):
             self.BUFFER = []
             
             self.stdinhttp_thread = Thread( target=asyncio.run, args=( self.input_stdinhttp_run( self.cmd, url ), ) )
-            self.stdinhttp_thread.start()
+            #self.stdinhttp_thread.start()
 
         elif self.input_type == 'STDIN' and self.output_type[ :2 ] == 'WS':
             url = ws_re.findall( self.output_type )[ 0 ]
@@ -1166,7 +1304,7 @@ class APiBaseAgent( APiTalkingAgent ):
             self.BUFFER = []
 
             self.stdinws_thread = Thread( target=asyncio.run, args=( self.input_stdinws_run( self.cmd, url ), ) )
-            self.stdinws_thread.start()
+            #self.stdinws_thread.start()
 
         elif self.input_type == 'STDIN' and self.output_type[ :6 ] == 'NETCAT':
             host, port, udp = netcat_re.findall( self.output_type )[ 0 ]
@@ -1177,9 +1315,9 @@ class APiBaseAgent( APiTalkingAgent ):
             self.BUFFER = []
 
             self.stdinnc_thread = Thread( target=asyncio.run, args=( self.input_stdinnc_run( self.cmd, self.nc_host, self.nc_port, self.nc_udp ), ) )
-            self.stdinnc_thread.start()
+            #self.stdinnc_thread.start()
             self.stdinncrec_thread = Thread( target=self.read_nc, args=( self.nc_host, self.nc_port, self.nc_udp ) )
-            self.stdinncrec_thread.start()
+            #self.stdinncrec_thread.start()
             
         elif self.input_type[ :4 ] == 'FILE' and self.output_type in ( 'STDOUT', 'STDERR' ):
             fl = file_re.findall( self.input_type )[ 0 ]
@@ -1187,7 +1325,7 @@ class APiBaseAgent( APiTalkingAgent ):
             self.input_file_written = False
             self.input = self.input_file
             self.filestdout_thread = Thread( target=asyncio.run, args=( self.input_file_run( self.cmd ), ) )
-            self.filestdout_thread.start()
+            #self.filestdout_thread.start()
         elif self.input_type[ :4 ] == 'FILE' and self.output_type[ :4 ] == 'FILE':
             infl = file_re.findall( self.input_type )[ 0 ]
             outfl = file_re.findall( self.output_type )[ 0 ]
@@ -1196,7 +1334,7 @@ class APiBaseAgent( APiTalkingAgent ):
             self.input_file_written = False
             self.input = self.input_file
             self.filefile_thread = Thread( target=asyncio.run, args=( self.input_filefile_run( self.cmd, self.output_file_path ), ) )
-            self.filefile_thread.start()
+            #self.filefile_thread.start()
         elif self.input_type[ :4 ] == 'FILE' and self.output_type[ :4 ] == 'HTTP':
             fl = file_re.findall( self.input_type )[ 0 ]
             self.input_file_path = fl
@@ -1205,7 +1343,7 @@ class APiBaseAgent( APiTalkingAgent ):
             url = http_re.findall( self.output_type )[ 0 ]
             self.output_url = url
             self.filehttp_thread = Thread( target=asyncio.run, args=( self.input_filehttp_run( self.cmd, self.input_file_path, self.output_url ), ) )
-            self.filehttp_thread.start()
+            #self.filehttp_thread.start()
 
         elif self.input_type[ :4 ] == 'FILE' and self.output_type[ :2 ] == 'WS':
             fl = file_re.findall( self.input_type )[ 0 ]
@@ -1215,7 +1353,7 @@ class APiBaseAgent( APiTalkingAgent ):
             url = ws_re.findall( self.output_type )[ 0 ]
             self.output_url = url
             self.filews_thread = Thread( target=asyncio.run, args=( self.input_filews_run( self.cmd, self.input_file_path, self.output_url ), ) )
-            self.filews_thread.start()
+            #self.filews_thread.start()
 
         elif self.input_type[ :4 ] == 'FILE' and self.output_type[ :6 ] == 'NETCAT':
             fl = file_re.findall( self.input_type )[ 0 ]
@@ -1229,16 +1367,16 @@ class APiBaseAgent( APiTalkingAgent ):
 
             
             self.filenc_thread = Thread( target=asyncio.run, args=( self.input_filenc_run( self.cmd, self.input_file_path ), ) )
-            self.filenc_thread.start()
+            #self.filenc_thread.start()
             self.filencrec_thread = Thread( target=self.read_nc, args=( self.nc_host, self.nc_port, self.nc_udp ) )
-            self.filencrec_thread.start() 
+            #self.filencrec_thread.start() 
 
         elif self.input_type[ :4 ] == 'HTTP' and self.output_type in ( 'STDOUT', 'STDERR' ):
             url = http_re.findall( self.input_type )[ 0 ]
             self.http_url = url
             self.input = self.input_http 
             self.httpstdout_thread = Thread( target=asyncio.run, args=( self.input_httpstdout_run( self.cmd ),  ) )
-            self.httpstdout_thread.start()
+            #self.httpstdout_thread.start()
             
         elif self.input_type[ :4 ] == 'HTTP' and self.output_type[ :4 ] == 'FILE':
             url = http_re.findall( self.input_type )[ 0 ]
@@ -1249,7 +1387,7 @@ class APiBaseAgent( APiTalkingAgent ):
 
             
             self.httpfile_thread = Thread( target=asyncio.run, args=( self.input_httpfile_run( self.cmd, self.output_file_path ),  ) )
-            self.httpfile_thread.start()
+            #self.httpfile_thread.start()
 
             
         elif self.input_type[ :4 ] == 'HTTP' and self.output_type[ :4 ] == 'HTTP':
@@ -1264,7 +1402,7 @@ class APiBaseAgent( APiTalkingAgent ):
             else:
                 self.input = self.input_http
                 self.httphttp_thread = Thread( target=asyncio.run, args=( self.input_httphttp_run( self.cmd, self.http_url_output ), ) )
-                self.httphttp_thread.start()
+                #self.httphttp_thread.start()
 
         elif self.input_type[ :4 ] == 'HTTP' and self.output_type[ :2 ] == 'WS':
             url = http_re.findall( self.input_type )[ 0 ]
@@ -1274,7 +1412,7 @@ class APiBaseAgent( APiTalkingAgent ):
             self.input = self.input_http
 
             self.httpws_thread = Thread( target=asyncio.run, args=( self.input_httpws_run( self.cmd, self.ws_output_url ), ) )
-            self.httpws_thread.start()
+            #self.httpws_thread.start()
 
         
         elif self.input_type[ :4 ] == 'HTTP' and self.output_type[ :6 ] == 'NETCAT':
@@ -1288,9 +1426,9 @@ class APiBaseAgent( APiTalkingAgent ):
 
             
             self.httpnc_thread = Thread( target=asyncio.run, args=( self.input_httpnc_run( self.cmd ), ) )
-            self.httpnc_thread.start()
+            #self.httpnc_thread.start()
             self.httpncrec_thread = Thread( target=self.read_nc, args=( self.nc_host, self.nc_port, self.nc_udp ) )
-            self.httpncrec_thread.start() 
+            #self.httpncrec_thread.start() 
         
         elif self.input_type[ :2 ] == 'WS' and self.output_type in ( 'STDOUT', 'STDERR' ):
             url = ws_re.findall( self.input_type )[ 0 ]
@@ -1298,7 +1436,7 @@ class APiBaseAgent( APiTalkingAgent ):
             self.input = self.input_ws
             
             self.wsstdout_thread = Thread( target=asyncio.run, args=( self.input_wsstdout_run( self.cmd ), ) )
-            self.wsstdout_thread.start()
+            #self.wsstdout_thread.start()
         
         elif self.input_type[ :2 ] == 'WS' and self.output_type[ :4 ] == 'FILE':
             url = ws_re.findall( self.input_type )[ 0 ]
@@ -1309,7 +1447,7 @@ class APiBaseAgent( APiTalkingAgent ):
 
             
             self.wsfile_thread = Thread( target=asyncio.run, args=( self.input_wsfile_run( self.cmd, self.output_file_path ),  ) )
-            self.wsfile_thread.start()
+            #self.wsfile_thread.start()
         
         elif self.input_type[ :2 ] == 'WS' and self.output_type[ :4 ] == 'HTTP':
             url = ws_re.findall( self.input_type )[ 0 ]
@@ -1319,7 +1457,7 @@ class APiBaseAgent( APiTalkingAgent ):
             self.output_url = url
             
             self.wshttp_thread = Thread( target=asyncio.run, args=( self.input_wshttp_run( self.cmd, self.output_url ), ) )
-            self.wshttp_thread.start()
+            #self.wshttp_thread.start()
             
         
         elif self.input_type[ :2 ] == 'WS' and self.output_type[ :2 ] == 'WS':
@@ -1335,7 +1473,7 @@ class APiBaseAgent( APiTalkingAgent ):
             else:
                 self.input = self.input_ws
                 self.wsws_thread = Thread( target=asyncio.run, args=( self.input_wsws_run( self.cmd, self.ws_output_url ), ) )
-                self.wsws_thread.start()
+                #self.wsws_thread.start()
             
         
         elif self.input_type[ :2 ] == 'WS' and self.output_type[ :6 ] == 'NETCAT':
@@ -1349,9 +1487,9 @@ class APiBaseAgent( APiTalkingAgent ):
 
             
             self.wsnc_thread = Thread( target=asyncio.run, args=( self.input_wsnc_run( self.cmd ), ) )
-            self.wsnc_thread.start()
+            #self.wsnc_thread.start()
             self.wsncrec_thread = Thread( target=self.read_nc, args=( self.nc_host, self.nc_port, self.nc_udp ) )
-            self.wsncrec_thread.start()
+            #self.wsncrec_thread.start()
 
         
         elif self.input_type[ :6 ] == 'NETCAT' and self.output_type in ( 'STDOUT', 'STDERR' ):
@@ -1362,7 +1500,7 @@ class APiBaseAgent( APiTalkingAgent ):
             self.input = self.input_nc
             
             self.ncstdout_thread = Thread( target=asyncio.run, args=( self.input_ncstdout_run( self.cmd ), ) )
-            self.ncstdout_thread.start()
+            #self.ncstdout_thread.start()
 
             error = True
             while error:
@@ -1382,7 +1520,7 @@ class APiBaseAgent( APiTalkingAgent ):
             self.input = self.input_nc
             
             self.ncfile_thread = Thread( target=asyncio.run, args=( self.input_ncfile_run( self.cmd, self.output_file_path ),  ) )
-            self.ncfile_thread.start()
+            #self.ncfile_thread.start()
             # TODO: find out why only the first output is processed, i.e.
             # ncat writes to the file and closes it seemingly after each
             # input making it possible for read_file() to read it and end
@@ -1406,7 +1544,7 @@ class APiBaseAgent( APiTalkingAgent ):
             self.output_url = url
             
             self.nchttp_thread = Thread( target=asyncio.run, args=( self.input_nchttp_run( self.cmd, self.output_url ), ) )
-            self.nchttp_thread.start()
+            #self.nchttp_thread.start()
             
             error = True
             while error:
@@ -1426,7 +1564,7 @@ class APiBaseAgent( APiTalkingAgent ):
             self.ws_output_url = url
             
             self.ncws_thread = Thread( target=asyncio.run, args=( self.input_ncws_run( self.cmd, self.ws_output_url ), ) )
-            self.ncws_thread.start()
+            #self.ncws_thread.start()
             
             error = True
             while error:
@@ -1465,7 +1603,7 @@ class APiBaseAgent( APiTalkingAgent ):
             else:
                 self.input = self.input_nc
                 self.ncnc_thread = Thread( target=asyncio.run, args=( self.input_ncnc_run( self.cmd ), ) )
-                self.ncnc_thread.start()
+                #self.ncnc_thread.start()
     
                 error = True
                 while error:
@@ -1477,7 +1615,7 @@ class APiBaseAgent( APiTalkingAgent ):
                         sleep( 0.1 )
             
                 self.ncncrec_thread = Thread( target=self.read_nc, args=( self.nc_host_output, self.nc_port_output, self.nc_udp_output ) )
-                self.ncncrec_thread.start()
+                #self.ncncrec_thread.start()
 
                 
         else:
@@ -1508,12 +1646,6 @@ class APiChannel( APiBaseAgent ):
         self.receiver_agents = []
 
         self.min_port, self.max_port = portrange
-        # TODO: This is a hardcoded delimiter for
-        #       messages that are forwarded through
-        #       the channel. Not an ideal solution.
-        #       It would be good to see if something
-        #       else would be better.
-        self.delimiter = '\n' 
 
         self.attach_servers = []
         self.subscribe_servers = []
@@ -1558,6 +1690,7 @@ class APiChannel( APiBaseAgent ):
             
             elif self.input.startswith( 'regex( ' ):
                 reg = self.input[ 7:-2 ]
+                print( 'RE', reg )
                 self.input_re = re.compile( reg )
                 self.map = self.map_re
             elif self.input.startswith( 'json( ' ):
@@ -1587,9 +1720,14 @@ class APiChannel( APiBaseAgent ):
         pass
 
     def map_re( self, data ):
+        print( 'MAPRE DATA', data )
         match = self.input_re.match( data )
+        print( 'MAPRE MATCH', match )
         vars = self.input_re.groupindex.keys()
+        print( 'MAPRE MATCH', vars )
         results = {}
+        if not match:
+            return ''
         for i in vars:
             results[ i ] = match.group( i )
         query = ''
@@ -1666,14 +1804,17 @@ class APiChannel( APiBaseAgent ):
             try:
                 srv = nclib.TCPServer( ( '0.0.0.0', port ) )
                 srv_created = True
+                print( 'SERVER CONNECTED AT PORT', port )
             except OSError as e:
                 port = self.get_free_port()
 
                 
         if srv_type == 'attach':
             self.attach_servers.append( srv )
+            print( 'ATTACH SERVERS:', self.attach_servers )
         elif srv_type == 'subscribe':
             self.subscribe_servers.append( srv )
+            print( 'SUBSCRIBE SERVERS:', self.subscribe_servers )
         else:
             raise APiChannelDefinitionError( 'Unknown server type:', srv_type )
         
@@ -1694,9 +1835,11 @@ class APiChannel( APiBaseAgent ):
                     if msg.metadata[ 'performative' ] == 'subscribe':
                         metadata[ 'type' ] = 'input'
                         server, port, protocol = self.agent.get_server( 'subscribe' )
+                        print( 'ADDED subscribe server', server, port )
                     elif msg.metadata[ 'performative' ] == 'request':
                         metadata[ 'type' ] = 'output'
                         server, port, protocol = self.agent.get_server( 'attach' )
+                        print( 'ADDED attach server', server, port )
                     else:
                         self.agent.say( 'Unknown message' )
                         metadata = self.agent.refuse_message_template
@@ -1730,22 +1873,28 @@ class APiChannel( APiBaseAgent ):
                     for client in srv:
                         yield client
                 except Exception as e:
+                    self.agent.say( e, srv.addr )
                     return
             
             if self.agent.attach_servers:
                 for srv in self.agent.attach_servers:
                     for client in iter_clients( srv ):
-                        print( 'CLIENT', client )
+                        self.agent.say( 'CLIENT', client, srv.addr )
                         result = client.recv_until( self.agent.delimiter, timeout=0.2 )
-                        print( 'RESULT', result )
+                        self.agent.say( 'RESULT', result, srv.addr )
                         if result:
-                            msg = self.agent.map( result )
-                            print( 'MSG', msg )
-                            for srv_out in self.agent.subscribe_servers:
-                                print( 'OUT SERVER', srv_out )
-                                for client_out in srv_out:
-                                    print( 'OUT CLIENT', client_out )
-                                    client_out.sendline( msg )
+                            self.agent.say( 'MAPPING RESULT', result.decode(), srv.addr )
+                            msg = self.agent.map( result.decode() )
+                            self.agent.say( 'MSG', msg, srv.addr )
+                            self.agent.say( 'SERVER LIST 1', self.agent.subscribe_servers )
+                            if self.agent.subscribe_servers:
+                                self.agent.say( 'SERVER LIST 2', self.agent.subscribe_servers )
+                                for srv_out in self.agent.subscribe_servers:
+                                    self.agent.say( 'OUT SERVER', srv_out, srv_out.addr )
+                                    for client_out in srv_out:
+                                        self.agent.say( 'SENDING MSG TO', client_out, client_out.peer )
+                                        client_out.sendline( msg.encode() )
+                                        self.agent.say( 'DONE SENDING MSG' )
                     
     async def setup(self):
         super().setup()
@@ -1836,6 +1985,23 @@ class APiAgent( APiBaseAgent ):
         self.attach_msg_template[ 'performative' ] = 'request'
         self.attach_msg_template[ 'ontology' ] = 'APiDataTransfer'
         self.attach_msg_template[ 'auth-token' ] = self.auth
+
+        self.agree_msg_template = {}
+        self.agree_msg_template[ 'performative' ] = 'agree'
+        self.agree_msg_template[ 'ontology' ] = 'APiScheduling'
+        self.agree_msg_template[ 'auth-token' ] = self.auth
+
+        self.refuse_msg_template = {}
+        self.refuse_msg_template[ 'performative' ] = 'refuse'
+        self.refuse_msg_template[ 'ontology' ] = 'APiScheduling'
+        self.refuse_msg_template[ 'auth-token' ] = self.auth
+        # Add reason in actual behaviour (e.g. service-failed, security-policy)
+
+        self.inform_msg_template = {}
+        self.inform_msg_template[ 'performative' ] = 'inform'
+        self.inform_msg_template[ 'ontology' ] = 'APiScheduling'
+        self.inform_msg_template[ 'auth-token' ] = self.auth
+        # Add exit-status (finished, error) and error-message (actual stacktrace, error code etc.); or add status (ready)
 
         for i in self.input_channels:
             try:
@@ -1965,12 +2131,22 @@ class APiAgent( APiBaseAgent ):
         Output callback method.
         data - data read from service.
         '''
-        if self.output_delimiter:
-            data += self.output_delimiter
         self.shell_buffer.append( data )
         self.say( 'I just received:', data )
-            # TODO: connect this to output channels
-
+        for srv in self.output_channel_servers.values():
+            print( 'SENDING', data.encode(), 'to', srv[ 'port' ], '... ', end='' )
+            sent = False
+            srv[ 'socket' ] = nclib.Netcat( ( srv[ 'server' ], srv[ 'port' ] ) )
+            while not sent:
+                try:
+                    srv[ 'socket' ].sendline( data.encode() )
+                    sent = True
+                    print( ' DONE!' )
+                except ( BrokenPipeError, ConnectionResetError ):
+                    print( 'ERROR SENDING', data, 'TO', srv[ 'server' ], srv[ 'port' ], '(BROKEN PIPE)' )
+                    print( 'TRYING TO RECONNECT' )
+                    srv[ 'socket' ] = nclib.Netcat( ( srv[ 'server' ], srv[ 'port' ] ) )
+                    
 
     def subscribe_to_channel( self, channel, channel_type ):
         # TODO: Implement channel subscription (sender, receiver)
@@ -2191,20 +2367,18 @@ class APiAgent( APiBaseAgent ):
         '''Ugly hack'''
         return list( self.address_book.keys() )[ list( self.address_book.values() ).index( address ) ]
 
-    async def connect_input( self, channel, server_info ):
-        # TODO: start netcat client to connect to server
-        #       and pipe input into where needed (e.g.
-        #       self, void, stdout, forward channel ... )
-        self.say( 'Connecting input channel %s with' % channel, server_info )
-        chname = self.get_channel_name( channel )
-        self.say( 'Channel name is', chname )
-
-    async def connect_output( self, channel, server_info ):
-        # TODO: start netcat client to connect to server
-        #       and pipe output to it
-        self.say( 'Connecting output channel %s to' % channel, server_info )
-        chname = self.get_channel_name( channel )
-        self.say( 'Channel name is', chname )
+    
+    def all_setup( self ):
+        # TODO: Deal with forward channels
+        try:
+            connected_inputs = set( [ ch for ch in self.input_channel_servers.keys() ] )
+            if self.input_channels == connected_inputs:
+                connected_outputs = set( [ ch for ch in self.output_channel_servers.keys() ] )
+                if self.output_channels == connected_outputs:
+                    return True
+        except AttributeError:
+            pass
+        return False
 
         
     async def setup( self ):        
@@ -2225,17 +2399,26 @@ class APiAgent( APiBaseAgent ):
         )
         self.add_behaviour( self.behaviour_qc, bqc_template )
 
-        bsic = self.SetupInputChannels()
+        self.behaviour_sic = self.SetupInputChannels()
         bsic_template = Template(
             metadata={ "ontology": "APiDataTransfer", "type":"input" }
         )
-        self.add_behaviour( bsic, bsic_template )
+        self.add_behaviour( self.behaviour_sic, bsic_template )
 
-        bsoc = self.SetupOutputChannels()
+        self.behaviour_soc = self.SetupOutputChannels()
         bsoc_template = Template(
             metadata={ "ontology": "APiDataTransfer", "type":"output" }
         )
-        self.add_behaviour( bsoc, bsoc_template )
+        self.add_behaviour( self.behaviour_soc, bsoc_template )
+
+        self.behaviour_l = self.Listen()
+        self.add_behaviour( self.behaviour_l )
+
+        self.behaviour_ss = self.StartService()
+        bss_template = Template(
+            metadata={ "ontology": "APiScheduling", "action":"start" }
+        )
+        self.add_behaviour( self.behaviour_ss, bss_template )
         
 
     class GetChannelAdresses( OneShotBehaviour ):
@@ -2280,7 +2463,7 @@ class APiAgent( APiBaseAgent ):
             
             for out in self.agent.output_channel_query_buffer:
                 while out not in self.agent.address_book:
-                    await asynicio.sleep( 0.1 )
+                    await asyncio.sleep( 0.1 )
                 channel = self.agent.address_book[ out ]
                 metadata = self.agent.attach_msg_template
                 metadata[ 'reply-with' ] = str( uuid4().hex )
@@ -2331,8 +2514,14 @@ class APiAgent( APiBaseAgent ):
                             self.agent.say( '(SetupInputChannels) Setting up', msg.metadata[ 'type' ], 'channel', channel )
                             servers[ channel ] = {}
                             servers[ channel ][ 'server' ] = msg.metadata[ 'server' ]
-                            servers[ channel ][ 'port' ] = msg.metadata[ 'port' ]
+                            servers[ channel ][ 'port' ] = int( msg.metadata[ 'port' ] )
                             servers[ channel ][ 'protocol' ] = msg.metadata[ 'protocol' ]
+                            servers[ channel ][ 'socket' ] = nclib.Netcat( ( msg.metadata[ 'server' ], int( msg.metadata[ 'port' ] ) ) )
+
+                            if len( self.agent.output_channel_servers ) == len( self.agent.output_channels ) and len( self.agent.input_channel_servers ) == len( self.agent.input_channels ):
+                                metadata = deepcopy( self.agent.inform_msg_template )
+                                metadata[ 'status' ] = 'ready'
+                                await self.agent.schedule_message( self.agent.holon, metadata=metadata )
                         
                     except KeyError:
                         self.agent.say( 'I have no memory of this message (%s). (awkward Gandalf look)' % msg.metadata[ 'in-reply-to' ])
@@ -2350,20 +2539,51 @@ class APiAgent( APiBaseAgent ):
                         self.agent.input_ack.remove( msg.metadata[ 'in-reply-to' ] )
                         if msg.metadata[ 'performative' ] == 'refuse':
                             self.agent.say( 'Error connecting to channel address due to ' + msg.metadata[ 'reason' ] )
-                            self.kill()
+                            self.kill() # TODO: Inform holon about failure
                         else:
                             channel = msg.metadata[ 'agent' ]
                             servers = self.agent.output_channel_servers
                             self.agent.say( '(SetupOutputChannels) Setting up', msg.metadata[ 'type' ], 'channel', channel )
                             servers[ channel ] = {}
                             servers[ channel ][ 'server' ] = msg.metadata[ 'server' ]
-                            servers[ channel ][ 'port' ] = msg.metadata[ 'port' ]
+                            servers[ channel ][ 'port' ] = int( msg.metadata[ 'port' ] )
                             servers[ channel ][ 'protocol' ] = msg.metadata[ 'protocol' ]
+                            servers[ channel ][ 'socket' ] = nclib.Netcat( ( msg.metadata[ 'server' ], int( msg.metadata[ 'port' ] ) ) )
+
+                            if len( self.agent.output_channel_servers ) == len( self.agent.output_channels ) and len( self.agent.input_channel_servers ) == len( self.agent.input_channels ):
+                                metadata = deepcopy( self.agent.inform_msg_template )
+                                metadata[ 'status' ] = 'ready'
+                                await self.agent.schedule_message( self.agent.holon, metadata=metadata )
                         
                     except KeyError:
                         self.agent.say( 'I have no memory of this message (%s). (awkward Gandalf look)' % msg.metadata[ 'in-reply-to' ])
                 else:
                     self.agent.say( 'Message could not be verified. IMPOSTER!!!!!!' )
+
+    class Listen( CyclicBehaviour ):
+        
+        async def run( self ):
+            # TODO: Deal with forward channels
+            if self.agent.all_setup():
+                for srv in self.agent.input_channel_servers.values():
+                    result = srv[ 'socket' ].recv_until( self.agent.delimiter, timeout=0.2 )
+                    sleep( 0.5 ) # TODO: Investigate if this line is needed
+                    if result:
+                        self.agent.say( '(Listen) Received', result, 'from server', srv[ 'server' ], srv[ 'port' ] )
+                        self.agent.input( result.decode() )
+                        print( '!'*100 )
+
+    class StartService( CyclicBehaviour ):
+        async def run( self ):
+            msg = await self.receive( timeout=1 )
+            if msg:
+                if self.agent.verify( msg ):
+                    self.agent.say( '(StartService) Message verified, processing ...' )
+                    self.agent.say( '(StartService) Holon has scheduled us to start. Starting service!' )
+                    self.agent.service_start()
+                else:
+                    self.agent.say( 'Message could not be verified. IMPOSTER!!!!!!' )
+                    
 
         
 class APiHolon( APiTalkingAgent ):
@@ -2379,13 +2599,13 @@ class APiHolon( APiTalkingAgent ):
 
         self.setup_environment( environment )
 
-        self.agents = {}
-        for a in agents:
-            self.setup_agent( a )
-
         self.channels = {}
         for c in channels:
             self.setup_channel( c )
+
+        self.agents = {}
+        for a in agents:
+            self.setup_agent( a )
 
         self.holons = {}
         for h in holons:
@@ -2394,7 +2614,8 @@ class APiHolon( APiTalkingAgent ):
         self.execution_plan = None
         self.setup_execution( execution_plan )
 
-        self.execute_plan()
+        self.all_started = False # Indicate if execution plan has been started already
+        self.instantiate_all()
 
         self.query_message_template = {}
         self.query_message_template[ 'performative' ] = 'inform-ref'
@@ -2406,7 +2627,18 @@ class APiHolon( APiTalkingAgent ):
         self.refuse_message_template[ 'ontology' ] = 'APiQuery'
         self.refuse_message_template[ 'auth-token' ] = self.auth
         self.refuse_message_template[ 'reason' ] = 'security-policy'
-        
+
+        self.request_message_template = {}
+        self.request_message_template[ 'performative' ] = 'request'
+        self.request_message_template[ 'ontology' ] = 'APiScheduling'
+        self.request_message_template[ 'auth-token' ] = self.auth
+        # Add action in actual behaviour (start or stop)
+
+        self.confirm_message_template = {}
+        self.confirm_message_template[ 'performative' ] = 'confirm'
+        self.confirm_message_template[ 'ontology' ] = 'APiScheduling'
+        self.confirm_message_template[ 'auth-token' ] = self.auth
+
         
 
     def setup_agent( self, agent ):
@@ -2421,6 +2653,7 @@ class APiHolon( APiTalkingAgent ):
         address, password = self.registrar.register( agent[ 'name' ] )
         agent[ 'cmd' ] = 'python3 ../agent.py "%s" "%s" "%s" "%s" "%s" "%s" "%s"' % ( agent[ 'name' ], address, password, self.address, self.token, json.dumps( agent[ 'args' ] ).replace('"','\\"'), json.dumps( agent[ 'flows' ] ).replace('"','\\"') )
         agent[ 'address' ] = address
+        agent[ 'status' ] = 'setup'
         self.agents[ agent[ 'name' ] ] = agent
 
     def setup_channel( self, channel ):
@@ -2431,6 +2664,7 @@ class APiHolon( APiTalkingAgent ):
         self.say( 'Registering channel', channel[ 'name' ] )
         channel[ 'cmd' ] = 'python3 ../channel.py "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s"' % ( channel[ 'name' ], address, password, self.address, self.token, json.dumps( ( self.registrar.min_port, self.registrar.max_port ) ), json.dumps( channel[ 'input' ] ).replace('"','\\"'), json.dumps( channel[ 'output' ] ).replace('"','\\"'), json.dumps( channel[ 'transformer' ] ).replace('"','\\"') )
         channel[ 'address' ] = address
+        channel[ 'status' ] = 'setup'
         self.channels[ channel[ 'name' ] ] = channel
 
     def setup_holon( self, holon ):
@@ -2446,23 +2680,31 @@ class APiHolon( APiTalkingAgent ):
         # TODO: Design and implement execution plans
         pass
 
-    def execute_plan( self ):
-        
-        if not self.execution_plan:
-            def start( cmd ):
-                return sp.Popen( cmd, stderr=sp.STDOUT, start_new_session=True )
+    def agent_name_from_address( self, address ):
+        # Ugly hack
+        address = str( address )
+        for name, agent in self.agents.items():
+            if agent[ 'address' ] == address:
+                return name
+
+    def instantiate_all( self ):
+        # Create agent and channel instances
+        def start( cmd ):
+            return sp.Popen( cmd, stderr=sp.STDOUT, start_new_session=True )
             
-            for c in self.channels.values():
-                cmd = shlex.split( c[ 'cmd' ] )
-                print( 'Running channel with:', cmd )
-                c[ 'instance' ] = Thread( target=start, args=( cmd, ) )
-                c[ 'instance' ].start()
+        for c in self.channels.values():
+            cmd = shlex.split( c[ 'cmd' ] )
+            print( 'Running channel with:', cmd )
+            c[ 'instance' ] = Thread( target=start, args=( cmd, ) )
+            c[ 'instance' ].start()
+            c[ 'status' ] = 'started'
                 
-            for a in self.agents.values():
-                cmd = shlex.split( a[ 'cmd' ] )
-                print( 'Running agent with:', cmd )
-                a[ 'instance' ] = Thread( target=start, args=( cmd, ) )
-                a[ 'instance' ].start()
+        for a in self.agents.values():
+            cmd = shlex.split( a[ 'cmd' ] )
+            print( 'Running agent with:', cmd )
+            a[ 'instance' ] = Thread( target=start, args=( cmd, ) )
+            a[ 'instance' ].start()
+            a[ 'status' ] = 'instantiated'
 
     async def stop( self ):
         # TODO: implement stopping all agents
@@ -2487,6 +2729,17 @@ class APiHolon( APiTalkingAgent ):
             }
         )
         self.add_behaviour( bqn, bqn_template )
+
+        bgra = self.GetReadyAgents()
+        bgra_template = Template(
+            metadata={ "performative": "inform",
+                       "ontology": "APiScheduling",
+                       "status":"ready" }
+        )
+        self.add_behaviour( bgra, bgra_template )
+
+        bep = self.ExecutePlan()
+        self.add_behaviour( bep )
         
         self.say( self.channels )
         self.say( self.agents )
@@ -2519,6 +2772,49 @@ class APiHolon( APiTalkingAgent ):
                     metadata = self.agent.refuse_message_template
                     metadata[ 'in-reply-to' ] = msg.metadata[ 'reply-with' ]
                     await self.agent.schedule_message( str( msg.sender ), metadata=metadata )
+
+    class GetReadyAgents( CyclicBehaviour ):
+        async def run( self ):
+            msg = await self.receive( timeout=0.1 )
+            if msg:
+                if self.agent.verify( msg ):
+                    self.agent.say( '(QueryNameGetReadyAgents) Message verified, processing ...' )
+                    agent = self.agent.agent_name_from_address( msg.sender.bare() )
+                    self.agent.say( '(QueryNameGetReadyAgents) Setting agent', agent, 'status to ready.' )
+                    self.agent.agents[ agent ][ 'status' ] = 'ready'
+                        
+                else:
+                    self.agent.say( 'Message could not be verified. IMPOSTER!!!!!!' )
+                    metadata = self.agent.refuse_message_template
+                    metadata[ 'in-reply-to' ] = msg.metadata[ 'reply-with' ]
+                    await self.agent.schedule_message( str( msg.sender ), metadata=metadata )
+
+    class ExecutePlan( CyclicBehaviour ):
+        async def run( self ):
+            if self.agent.execution_plan:
+                # TODO: Design and implement execution plans
+                pass
+            else:
+                # Tell all agents to start if they are ready
+                all_ready = True
+                for agent in self.agent.agents.values():
+                    if agent[ 'status' ] != 'ready':
+                        all_ready = False
+                        break
+                if all_ready and not self.agent.all_started:
+                    self.agent.say( '(Execute plan) All agents ready, scheduling them for start!' )
+                    metadata = deepcopy( self.agent.request_message_template )
+                    metadata[ 'action' ] = 'start'
+                    for agent in self.agent.agents.values():
+                        if agent[ 'name' ] != 'bla_file_stdout':
+                            await self.agent.schedule_message( agent[ 'address' ], metadata=metadata )
+                    await asyncio.sleep( 15 )
+                    print( 'NOW STARTING FILEREADER' )
+                    await self.agent.schedule_message( self.agent.agents[ 'bla_file_stdout' ][ 'address' ], metadata=metadata )
+                    self.agent.all_started = True
+                    
+            
+        
                
 class APiRegistrationService:
     '''
@@ -3118,8 +3414,8 @@ if __name__ == '__main__':
     #c.start()
 
     h1name, h1password = rs.register( 'holonko1' )
-    agents = [ { 'name':'bla_stdin_stdout', 'flows':[ ( 'self', 'c' ), ( 'd', 'self' ), ( 'c', 'd' ) ], 'args':None }] #, { 'name':'bla_stdin_ws', 'flows':[ ( 'c', 'self' ), ( 'd', 'self' ) ], 'args':None }, { 'name':'bla_http_ws', 'flows':[ ( 'd', 'self' ) ], 'args':None } ]
-    channels = [ { 'name':'c', 'input':'regex( x is (?P<act>[0-9]+) )', 'output':"{ 'action':?act, 'history':?act }", 'transformer':None }, { 'name':'d', 'input':'regex( x is (?P<act>[0-9]+) )', 'output':"{ 'action':?act, 'history':?act }", 'transformer':None } ]
+    agents = [ { 'name':'bla_stdin_stdout', 'flows':[ ( 'c', 'self' ), ( 'self', 'd' ) ], 'args':None }, { 'name':'bla_stdin_http', 'flows':[ ( 'd', 'self' ) ], 'args':None }, { 'name':'bla_file_stdout', 'flows':[ ( 'self', 'c' ) ], 'args':None } ]
+    channels = [ { 'name':'c', 'input':'regex( (?P<act>.*) )', 'output':"?act", 'transformer':None }, { 'name':'d', 'input':'regex( (?P<act>.*) )', 'output':"{ 'action':'?act', 'history':'?act' }", 'transformer':None } ]
     environment = None
     holons = []
     execution_plan = None
