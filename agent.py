@@ -6,7 +6,6 @@ import argparse
 class APiAgent( APiBaseAgent ):
     '''Service wrapper agent.'''
 
-    # TODO: Sort methods / coroutines by type and write documentation
     def __init__( self, agentname, name, password, holon, token, args=[], flows=[] ):
         '''
         Constructor.

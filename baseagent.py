@@ -138,6 +138,8 @@ class APiBaseAgent( APiTalkingAgent ):
     file, HTTP, WebSocket, Netcat). Not to be instanced by itself, but should be
     used for inheritance.
     '''
+
+    # TODO: Sort methods / coroutines by type and write documentation
     async def read_stdout( self, stdout ):
         '''
         Coroutine reading STDOUT and calling callback method.
@@ -1478,7 +1480,6 @@ class APiBaseAgent( APiTalkingAgent ):
                 except Exception as e:
                     sleep( 0.1 )
                     
-            # TODO: add adequate threads and finish other outputs
         elif self.input_type[ :6 ] == 'NETCAT' and self.output_type[ :6 ] == 'NETCAT':
             host, port, udp = netcat_re.findall( self.input_type )[ 0 ]
             self.nc_host = host
