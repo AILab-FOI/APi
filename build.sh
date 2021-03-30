@@ -22,7 +22,15 @@ case $1 in
 	chmod +x APi.py
 	./APi.py
     ;;
-    -c|--commit)
+    -b|--branch)
+	if [ $# -eq 1 ]
+	then
+	    echo "No branch name supplied, aborting!"
+	else
+	   git checkout -b $2
+	fi
+    ;;
+    -cc|--commit-main)
 	if [ $# -eq 1 ]
 	then
 	    echo "No commit message supplied, aborting!"
@@ -31,8 +39,18 @@ case $1 in
 	    git add .
 	    git commit -m "$2"
 	    git push origin main
-	fi
-	
+	fi	
+    ;;
+    -c|--commit)
+        if [ $# -eq 2 ]
+	then
+	    echo "No commit message and/or branch supplied, aborting!"
+	else
+	    python3 version_control.py
+	    git add .
+	    git commit -m "$2"
+	    git push --set-upstream origin $3
+        fi
     ;;
     *)    # unknown option
 	echo "Unknown argument, please explain yourself!"
