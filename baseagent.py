@@ -98,8 +98,10 @@ class APiTalkingAgent( Agent ):
     def setup( self ):
         self.behaviour_output = self.OutputQueue()
         self.add_behaviour( self.behaviour_output )
+
+        st_template = Template( metadata={ "ontology": "APiScheduling", "action": "stop" } )
         st = self.Stop()
-        self.add_behaviour( st )
+        self.add_behaviour(st, st_template)
 
 
     async def schedule_message( self, to, body='', metadata={} ):
@@ -129,6 +131,23 @@ class APiTalkingAgent( Agent ):
                         self.kill()
                 except KeyError:
                     pass
+
+    class Stop( CyclicBehaviour ):
+        async def run(self):
+            msg = await self.receive( timeout=1 )
+            if msg:
+                if self.agent.verify( msg ):
+                    self.agent.say( '(StopAgent) Message verified, processing ...' )
+                    self.agent.say( '(StopAgent) Holon has scheduled us to stop. Stopping!' )
+
+                    metadata = deepcopy( self.agent.inform_msg_template )
+                    metadata[ 'status' ] = 'stopped'
+                    await self.agent.schedule_message( self.agent.holon, metadata=metadata )
+
+                    # or should we use super().stop()?
+                    self.kill()
+                else:
+                    self.agent.say( 'Message could not be verified. IMPOSTER!!!!!!' )
 
 
 
