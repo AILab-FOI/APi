@@ -125,17 +125,13 @@ class APiHolon( APiTalkingAgent ):
             a[ 'status' ] = 'instantiated'
 
     async def stop( self ):
-        # TODO: implement stopping all agents
-        #       and channels by sending them
-        #       stopping messages.
+        self.say( '(Stop Agents) Stopping all agents & channels!' )
+        metadata = deepcopy( self.request_message_template )
+        metadata[ 'action' ] = 'stop'
         for c in self.channels.values():
-            c[ 'instance' ].join()
-            
+            await self.schedule_message( c[ 'address' ], metadata=metadata )
         for a in self.agents.values():
-            a[ 'instance' ].join()
-
-        super().stop()
-        
+            await self.schedule_message( a[ 'address' ], metadata=metadata )
 
     async def setup( self ):
         super().setup()
@@ -166,6 +162,10 @@ class APiHolon( APiTalkingAgent ):
                        "status":"finished" }
         )
         self.add_behaviour( bfa, bfa_template )
+
+        bsa = self.StopAgents()
+        bsa_template = Template( metadata={ "performative": "inform", "ontology": "APiScheduling", "status": "stopped" } )
+        self.add_behaviour( bsa, bsa_template )
         
         self.say( self.channels )
         self.say( self.agents )
@@ -254,6 +254,40 @@ class APiHolon( APiTalkingAgent ):
 
                     await self.agent.schedule_message( str( msg.sender ), metadata=metadata )
                         
+                else:
+                    self.agent.say( 'Message could not be verified. IMPOSTER!!!!!!' )
+                    metadata = deepcopy( self.agent.refuse_message_template )
+                    metadata[ 'in-reply-to' ] = msg.metadata[ 'reply-with' ]
+                    await self.agent.schedule_message( str( msg.sender ), metadata=metadata )
+
+    class StopAgents( CyclicBehaviour ):
+        def all_stopped( self, agents ):
+            if any( a[ 'status' ] != 'stopped' for a in agents ):
+                return False
+
+            return True
+
+        async def run( self ):
+            msg = await self.receive( timeout=0.1 )
+            if msg:
+                if self.agent.verify( msg ):
+                    self.agent.say( '(StopAgents) Message verified, processing ...' )
+                    agent = self.agent.agent_name_from_address( msg.sender.bare() )
+
+                    if msg.metadata[ 'error-message' ] != 'null':
+                        self.agent.say( 'Agent', agent, 'stopped with error', str( msg[ 'error-message' ] ) )
+                    else:
+                        self.agent.say( 'Agent', agent, 'stopped gracefully.' )
+                    self.agent.agents[ agent ][ 'status' ] = 'stopped'
+
+                    all_stopped = self.all_stopped( [ *self.agent.agents.values(), *self.agent.channels.values() ] )
+
+                    if all_stopped:
+                        self.agent.say( '(StopAgents) All agents have stopped ...' )
+                        self.agent.say( '(StopAgents) Holon stopping ...' )
+
+                        super.stop()
+
                 else:
                     self.agent.say( 'Message could not be verified. IMPOSTER!!!!!!' )
                     metadata = deepcopy( self.agent.refuse_message_template )
