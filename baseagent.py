@@ -117,20 +117,6 @@ class APiTalkingAgent( Agent ):
         async def run( self ):
             pass
 
-
-    class Stop( CyclicBehaviour ):
-        # TODO: Test and validate this
-        #       Also look up async def stop in APiHolon
-        async def run( self ):
-            msg = await self.receive( timeout=0.1 )
-            if msg:
-                try:
-                    performative = msg.metadata[ "performative" ]
-                    if performative == 'request' and msg.sender == self.agent.holon and msg.content == 'stop':
-                        self.kill()
-                except KeyError:
-                    pass
-
     class Stop( CyclicBehaviour ):
         async def run(self):
             msg = await self.receive( timeout=1 )
