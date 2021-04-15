@@ -286,7 +286,7 @@ class APiHolon( APiTalkingAgent ):
                         self.agent.say( '(StopAgents) All agents have stopped ...' )
                         self.agent.say( '(StopAgents) Holon stopping ...' )
 
-                        super.stop()
+                        super().stop()
 
                 else:
                     self.agent.say( 'Message could not be verified. IMPOSTER!!!!!!' )
