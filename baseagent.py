@@ -101,8 +101,7 @@ class APiTalkingAgent( Agent ):
 
         st_template = Template( metadata={ "ontology": "APiScheduling", "action": "stop" } )
         st = self.Stop()
-        self.add_behaviour(st, st_template)
-
+        self.add_behaviour( st, st_template )
 
     async def schedule_message( self, to, body='', metadata={} ):
         # TODO: See if this can be done in a more elegant way ...
