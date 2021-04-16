@@ -166,11 +166,10 @@ class APiChannel( APiBaseAgent ):
         return IP
     
     def create_server( self, port, protocol ):
-        if protocol == 'tcp':
-            return nclib.TCPServer( ( '0.0.0.0', port ) )
+        if protocol == 'udp':
+            return nclib.UDPServer( ( '0.0.0.0', port ) )
         
-        return nclib.UDPServer( ( '0.0.0.0', port ) )
-
+        return nclib.TCPServer( ( '0.0.0.0', port ) )
 
     def get_server( self, srv_type, protocol ):
         '''Get a NetCat server for sending or receiving'''
