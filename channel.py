@@ -173,7 +173,6 @@ class APiChannel( APiBaseAgent ):
 
     def get_server( self, srv_type, protocol ):
         '''Get a NetCat server for sending or receiving'''
-        # TODO: Deal with TCP/UDP selection
         port =  self.get_free_port()
         host = self.get_ip()
 
