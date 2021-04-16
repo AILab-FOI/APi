@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import sys
-
+    
 from version import __version__
 from helpers import *
 from errors import *
@@ -8,6 +8,7 @@ from baseagent import *
 from debug import *
 from holon import *
 from listener import *
+
 
 
 '''
@@ -26,79 +27,72 @@ Awkward π-nguin %s : Microservice orchestration language
 ------------------------------------------------------------
 ''' % __version__
 
-
-def process(stream):
-    lexer = APiLexer(stream)
+def process( stream ):
+    lexer = APiLexer( stream )
     lexer.recover = lambda x: sys.exit()
-    stream = CommonTokenStream(lexer)
-    parser = APiParser(stream)
+    stream = CommonTokenStream( lexer )
+    parser = APiParser( stream )
     tree = parser.api_program()
     printer = APi()
     walker = ParseTreeWalker()
-    walker.walk(printer, tree)
+    walker.walk( printer, tree )
     try:
-        return parser.STACK[-1]
+        return parser.STACK[ -1 ]
     except:
-        pass  # TODO: remove exception handling when all parts of parser are implemented
-
+        pass # TODO: remove exception handling when all parts of parser are implemented
+    
 
 BYE = 'Bye!'
-
-
 def main():
-    if len(sys.argv) > 2:
-        print('Usage: APi [filename.api]')
+    if len( sys.argv ) > 2:
+        print( 'Usage: APi [filename.api]' )
     else:
-        if len(sys.argv) == 2:
-            fl = sys.argv[1]
-            stream = FileStream(fl, encoding='utf-8')
-            process(stream)
+        if len( sys.argv ) == 2:
+            fl = sys.argv[ 1 ]
+            stream = FileStream( fl, encoding='utf-8' )
+            process( stream )            
         else:
-            print(splash)
+            print( splash )
             while True:
                 try:
-                    command = input("Aπ :- ")
+                    command = input( "Aπ :- " )
                 except:
-                    print('\n%s!' % BYE)
+                    print( '\n%s!' % BYE )
                     quit_spade()
                     sys.exit()
-
+                
                 if command == "exit":
-                    print('%s!' % BYE)
+                    print( '%s!' % BYE )
                     quit_spade()
                     break
                 elif command == '':
                     continue
-                elif command.strip()[-1] == ':':
-                    line = input('|')
+                elif command.strip()[ -1 ] == ':':
+                    line = input( '|' )
                     command += '\n' + line
-                    while line[0] == '\t':
-                        line = input('|')
+                    while line[ 0 ] == '\t':
+                        line = input( '|' )
                         command += '\n' + line
                         if not line:
                             break
-
+                    
                 if command:
-                    stream = InputStream(command + '\n')
-                    process(stream)
-
+                    stream = InputStream( command + '\n' )
+                    process( stream )
 
 def initialize():
     global BYE
-    BYE = random.choice([i.strip().title()
-                         for i in open('bye.txt').readlines()][1:])
-    if not os.path.exists(TMP_FOLDER):
-        os.makedirs(TMP_FOLDER)
-
-
+    BYE = random.choice( [ i.strip().title() for i in open( 'bye.txt' ).readlines() ][ 1: ] )
+    if not os.path.exists( TMP_FOLDER ):
+        os.makedirs( TMP_FOLDER )
+                    
 if __name__ == '__main__':
     initialize()
     ns = APiNamespace()
 
     # TESTING
     os.chdir('test')
-    # create server
-    rs = APiRegistrationService('APi-test')
+    rs = APiRegistrationService( 'APi-test' )
     #a1, a1pass = rs.register( 'ivek' )
     #a2, a2pass = rs.register( 'joza' )
     #c1, c1pass = rs.register( 'stefica' )
@@ -111,30 +105,23 @@ if __name__ == '__main__':
     #ns[ 'agents' ][ 'b' ] = b
     #ns[ 'channels' ][ 'c' ] = c
 
-    # c.start()
+    #c.start()
 
-    # create service
-    # APi-test_holonko1_aa1e90371dd648dcb9789c805422a1d1@rec.foi.hr
-    # 1f1bee16a21a4d058d7bae31cfcf9695
-    h1name, h1password = rs.register('holonko1')
-    agents = [
-        {'name': 'bla_stdin_stdout', 'flows': [
-            ('c', 'self'), ('self', 'd')], 'args': {'protocol': 'udp'}},
-        {'name': 'bla_stdin_http', 'flows': [('d', 'self')], 'args':{'protocol': 'udp'}},
-        {'name': 'bla_file_stdout', 'flows': [('self', 'c')], 'args':{'protocol': 'udp'}}]
-    channels = [
-        {'name': 'c', 'input': 'regex( (?P<act>.*) )',
-         'output': "?act", 'transformer': None},
-        {'name': 'd', 'input': 'regex( (?P<act>.*) )', 'output': "{ 'action':'?act', 'history':'?act' }", 'transformer': None}]
+    h1name, h1password = rs.register( 'holonko1' )
+    agents = [ { 'name':'bla_stdin_stdout', 'flows':[ ( 'c', 'self' ), ( 'self', 'd' ) ], 'args':{'protocol': 'tcp'} }, { 'name':'bla_stdin_http', 'flows':[ ( 'd', 'self' ) ], 'args':{'protocol': 'tcp'} }, { 'name':'bla_file_stdout', 'flows':[ ( 'self', 'c' ) ], 'args':{'protocol': 'tcp'} } ]
+    channels = [ { 'name':'c', 'input':'regex( (?P<act>.*) )', 'output':"?act", 'transformer':None }, { 'name':'d', 'input':'regex( (?P<act>.*) )', 'output':"{ 'action':'?act', 'history':'?act' }", 'transformer':None } ]
     environment = None
     holons = []
     execution_plan = None
-    h1 = APiHolon('holonko1', h1name, h1password, agents,
-                  channels, environment, holons, execution_plan)
+    print( h1name )
+    h1 = APiHolon( 'holonko1', h1name, h1password, agents, channels, environment, holons, execution_plan )
     h1.start()
+    
 
-    # a = APiAgent( 'bla_ws_ws', 'bla0agent@dragon.foi.hr', 'tajna', flows=[ ('a', 'self'), ('self', 'c'), ('d', 'e', 'NIL'), ('b','VOID') ] ) # ('STDIN', 'self'),  ('self', 'STDOUT'),
+    
+    #a = APiAgent( 'bla_ws_ws', 'bla0agent@dragon.foi.hr', 'tajna', flows=[ ('a', 'self'), ('self', 'c'), ('d', 'e', 'NIL'), ('b','VOID') ] ) # ('STDIN', 'self'),  ('self', 'STDOUT'),
 
+    
     '''
     sleep( 1 )
     a.input( 'avauhu\nguhu\nbuhu\nwuhu\ncuhu\n' )
@@ -147,8 +134,9 @@ if __name__ == '__main__':
     a.input( 'puhu\nluhu\n' )
     sleep( 1 )
     a.input( '<!eof!>' )'''
-
+    
     #a.start_shell_client( await_stdin=True, print_stdout=True, print_stderr=True )
+    
 
     #c = APiChannel( 'test', 'bla0agent@dragon.foi.hr', 'tajna', channel_input='regex( x is (?P<act>[0-9]+) )', channel_output="{ 'action':?act, 'history':?act }" )
 
@@ -156,16 +144,20 @@ if __name__ == '__main__':
 
     #c = APiChannel( 'test', 'bla0agent@dragon.foi.hr', 'tajna', channel_input='json( { "gugu":?y, "bla":?x } )', channel_output='<bla><nana x="?x" /><y>?y</y></bla>' )
 
-    # c.start()
-
+    #c.start()
+    
     #print( c.map( '{ "bla":234, "gugu":1 }' ) )
 
-    # c = APiChannel( 'test', 'bla0agent@dragon.foi.hr', 'tajna' ) # TRANSPARENT CHANNEL
+    
+    #c = APiChannel( 'test', 'bla0agent@dragon.foi.hr', 'tajna' ) # TRANSPARENT CHANNEL
 
-    #print( c.map( '{ "bla":234, "gugu":1 }' ) )
+    #print( c.map( '{ "bla":234, "gugu":1 }' ) ) 
+    
+    
+    print( ns )
 
-    print(ns)
-
+    
     main()
-
+    
     spade.quit_spade()
+
