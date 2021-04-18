@@ -6,7 +6,7 @@ import argparse
 class APiAgent( APiBaseAgent ):
     '''Service wrapper agent.'''
 
-    def __init__( self, agentname, name, password, holon, token, args=[], flows=[] ):
+    def __init__( self, agentname, name, password, holon, token, args={}, flows=[] ):
         '''
         Constructor.
         agentname - name as in agent definition (.ad) file.
@@ -27,7 +27,7 @@ class APiAgent( APiBaseAgent ):
         self.agentname = agentname
         self.holon = holon
         self._load( fh )
-        self.agentargs = args
+        self.read_args( args )
 
         self.flows = []
         for f in flows:
@@ -67,11 +67,13 @@ class APiAgent( APiBaseAgent ):
 
         self.subscribe_msg_template = {}
         self.subscribe_msg_template[ 'performative' ] = 'subscribe'
+        self.subscribe_msg_template[ 'protocol' ] = self.agent_args[ 'protocol' ]
         self.subscribe_msg_template[ 'ontology' ] = 'APiDataTransfer'
         self.subscribe_msg_template[ 'auth-token' ] = self.auth
 
         self.attach_msg_template = {}
         self.attach_msg_template[ 'performative' ] = 'request'
+        self.attach_msg_template[ 'protocol' ] = self.agent_args[ 'protocol' ]
         self.attach_msg_template[ 'ontology' ] = 'APiDataTransfer'
         self.attach_msg_template[ 'auth-token' ] = self.auth
 
@@ -213,7 +215,11 @@ class APiAgent( APiBaseAgent ):
             err = 'Invalid agent type: %s' % self.type
             raise APiAgentDefinitionError( err )
             
-        
+    def read_args( self, args ):
+        self.agent_args = {}
+        self.agent_args[ 'protocol' ] = 'tcp'
+        if args != None and args[ 'protocol' ]:
+            self.agent_args[ 'protocol' ] = args[ 'protocol' ]
     
     def output_callback( self, data ):
         '''
@@ -224,8 +230,9 @@ class APiAgent( APiBaseAgent ):
         self.say( 'I just received:', data )
         for srv in self.output_channel_servers.values():
             print( 'SENDING', data.encode(), 'to', srv[ 'port' ], '... ', end='' )
+            is_udp = srv[ 'protocol' ] == 'udp'
             sent = False
-            srv[ 'socket' ] = nclib.Netcat( ( srv[ 'server' ], srv[ 'port' ] ) )
+            srv[ 'socket' ] = nclib.Netcat( ( srv[ 'server' ], srv[ 'port' ] ), udp=is_udp )
             while not sent:
                 try:
                     srv[ 'socket' ].sendline( data.encode() )
@@ -234,7 +241,7 @@ class APiAgent( APiBaseAgent ):
                 except ( BrokenPipeError, ConnectionResetError ):
                     print( 'ERROR SENDING', data, 'TO', srv[ 'server' ], srv[ 'port' ], '(BROKEN PIPE)' )
                     print( 'TRYING TO RECONNECT' )
-                    srv[ 'socket' ] = nclib.Netcat( ( srv[ 'server' ], srv[ 'port' ] ) )
+                    srv[ 'socket' ] = nclib.Netcat( ( srv[ 'server' ], srv[ 'port' ] ), udp=is_udp )
         if data == self.output_delimiter: # TODO: Verify this
             self.service_quit( 'End of output' )
                     
@@ -601,13 +608,14 @@ class APiAgent( APiBaseAgent ):
                             self.kill()
                         else:
                             channel = msg.metadata[ 'agent' ]
+                            is_udp = msg.metadata[ 'protocol' ] == 'udp'
                             servers = self.agent.input_channel_servers
                             self.agent.say( '(SetupInputChannels) Setting up', msg.metadata[ 'type' ], 'channel', channel )
                             servers[ channel ] = {}
                             servers[ channel ][ 'server' ] = msg.metadata[ 'server' ]
                             servers[ channel ][ 'port' ] = int( msg.metadata[ 'port' ] )
                             servers[ channel ][ 'protocol' ] = msg.metadata[ 'protocol' ]
-                            servers[ channel ][ 'socket' ] = nclib.Netcat( ( msg.metadata[ 'server' ], int( msg.metadata[ 'port' ] ) ) )
+                            servers[ channel ][ 'socket' ] = nclib.Netcat( ( msg.metadata[ 'server' ], int( msg.metadata[ 'port' ] ) ), udp=is_udp )
 
                             if len( self.agent.output_channel_servers ) == len( self.agent.output_channels ) and len( self.agent.input_channel_servers ) == len( self.agent.input_channels ):
                                 metadata = deepcopy( self.agent.inform_msg_template )
@@ -633,13 +641,14 @@ class APiAgent( APiBaseAgent ):
                             self.kill() # TODO: Inform holon about failure
                         else:
                             channel = msg.metadata[ 'agent' ]
+                            is_udp = msg.metadata['protocol'] == 'udp'
                             servers = self.agent.output_channel_servers
                             self.agent.say( '(SetupOutputChannels) Setting up', msg.metadata[ 'type' ], 'channel', channel )
                             servers[ channel ] = {}
                             servers[ channel ][ 'server' ] = msg.metadata[ 'server' ]
                             servers[ channel ][ 'port' ] = int( msg.metadata[ 'port' ] )
                             servers[ channel ][ 'protocol' ] = msg.metadata[ 'protocol' ]
-                            servers[ channel ][ 'socket' ] = nclib.Netcat( ( msg.metadata[ 'server' ], int( msg.metadata[ 'port' ] ) ) )
+                            servers[ channel ][ 'socket' ] = nclib.Netcat( ( msg.metadata[ 'server' ], int( msg.metadata[ 'port' ] ) ), udp=is_udp )
 
                             if len( self.agent.output_channel_servers ) == len( self.agent.output_channels ) and len( self.agent.input_channel_servers ) == len( self.agent.input_channels ):
                                 metadata = deepcopy( self.agent.inform_msg_template )

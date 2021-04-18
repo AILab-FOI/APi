@@ -165,9 +165,14 @@ class APiChannel( APiBaseAgent ):
             s.close()
         return IP
     
-    def get_server( self, srv_type ):
+    def create_server( self, port, protocol ):
+        if protocol == 'udp':
+            return nclib.UDPServer( ( '0.0.0.0', port ) )
+        
+        return nclib.TCPServer( ( '0.0.0.0', port ) )
+
+    def get_server( self, srv_type, protocol ):
         '''Get a NetCat server for sending or receiving'''
-        # TODO: Deal with TCP/UDP selection
         port =  self.get_free_port()
         host = self.get_ip()
 
@@ -176,9 +181,9 @@ class APiChannel( APiBaseAgent ):
         srv_created = False
         while not srv_created:
             try:
-                srv = nclib.TCPServer( ( '0.0.0.0', port ) )
+                srv = self.create_server( port, protocol )
                 srv_created = True
-                print( 'SERVER CONNECTED AT PORT', port )
+                print( f'{protocol} SERVER CONNECTED AT PORT', port )
             except OSError as e:
                 port = self.get_free_port()
 
@@ -192,7 +197,7 @@ class APiChannel( APiBaseAgent ):
         else:
             raise APiChannelDefinitionError( 'Unknown server type:', srv_type )
         
-        return host, str( port ), 'tcp'
+        return host, str( port ), protocol
 
 
     class Subscribe( CyclicBehaviour ):
@@ -206,13 +211,14 @@ class APiChannel( APiBaseAgent ):
                     metadata = deepcopy( self.agent.agree_message_template )
                     metadata[ 'in-reply-to' ] = msg.metadata[ 'reply-with' ]
                     metadata[ 'agent' ] = self.agent.channelname
+                    req_protocol = msg.metadata[ 'protocol' ]
                     if msg.metadata[ 'performative' ] == 'subscribe':
                         metadata[ 'type' ] = 'input'
-                        server, port, protocol = self.agent.get_server( 'subscribe' )
+                        server, port, protocol = self.agent.get_server( 'subscribe', req_protocol )
                         print( 'ADDED subscribe server', server, port )
                     elif msg.metadata[ 'performative' ] == 'request':
                         metadata[ 'type' ] = 'output'
-                        server, port, protocol = self.agent.get_server( 'attach' )
+                        server, port, protocol = self.agent.get_server( 'attach', req_protocol )
                         print( 'ADDED attach server', server, port )
                     else:
                         self.agent.say( 'Unknown message' )

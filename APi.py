@@ -108,7 +108,7 @@ if __name__ == '__main__':
     #c.start()
 
     h1name, h1password = rs.register( 'holonko1' )
-    agents = [ { 'name':'bla_stdin_stdout', 'flows':[ ( 'c', 'self' ), ( 'self', 'd' ) ], 'args':None }, { 'name':'bla_stdin_http', 'flows':[ ( 'd', 'self' ) ], 'args':None }, { 'name':'bla_file_stdout', 'flows':[ ( 'self', 'c' ) ], 'args':None } ]
+    agents = [ { 'name':'bla_stdin_stdout', 'flows':[ ( 'c', 'self' ), ( 'self', 'd' ) ], 'args':{'protocol': 'tcp'} }, { 'name':'bla_stdin_http', 'flows':[ ( 'd', 'self' ) ], 'args':{'protocol': 'tcp'} }, { 'name':'bla_file_stdout', 'flows':[ ( 'self', 'c' ) ], 'args':{'protocol': 'tcp'} } ]
     channels = [ { 'name':'c', 'input':'regex( (?P<act>.*) )', 'output':"?act", 'transformer':None }, { 'name':'d', 'input':'regex( (?P<act>.*) )', 'output':"{ 'action':'?act', 'history':'?act' }", 'transformer':None } ]
     environment = None
     holons = []
