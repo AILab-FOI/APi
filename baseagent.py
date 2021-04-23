@@ -90,7 +90,7 @@ class APiTalkingAgent( Agent ):
             out = [ '%s:' % self.name ]
             out += [ i for i in msg ]
             self.LOG.info( out )'''
-            #print( '%s:' % self.name, *msg )
+            print( '%s:' % self.name, *msg )
 
     def verify( self, msg ):
         return verify( msg.metadata[ 'auth-token' ], str( msg.sender.bare() ) + self.token )
