@@ -90,7 +90,7 @@ class APiTalkingAgent( Agent ):
             out = [ '%s:' % self.name ]
             out += [ i for i in msg ]
             self.LOG.info( out )'''
-            print( '%s:' % self.name, *msg )
+            #print( '%s:' % self.name, *msg )
 
     def verify( self, msg ):
         return verify( msg.metadata[ 'auth-token' ], str( msg.sender.bare() ) + self.token )
@@ -155,8 +155,8 @@ class APiBaseAgent( APiTalkingAgent ):
                 break
 
             if self.output_type == 'STDOUT' and buf:
-                self.output_callback( buf.decode() )
-        self.output_callback( self.output_delimiter ) # TODO: End of output? Verify this
+                await self.output_callback( buf.decode() )
+        await self.output_callback( self.output_delimiter ) # TODO: End of output? Verify this
 
 
     async def read_stderr( self, stderr ):
@@ -170,7 +170,7 @@ class APiBaseAgent( APiTalkingAgent ):
                 break
             
             if self.output_type == 'STDERR':
-                self.output_callback( buf.decode() )
+                await self.output_callback( buf.decode() )
 
     
     async def read_file( self, file_path ):
@@ -184,7 +184,7 @@ class APiBaseAgent( APiTalkingAgent ):
         while file_empty:
             async with aiofiles.open( file_path, mode='r' ) as f:
                 async for line in f:
-                    self.output_callback( line )
+                    await self.output_callback( line )
                     file_empty = False
             await asyncio.sleep( 0.1 )
 
@@ -204,7 +204,7 @@ class APiBaseAgent( APiTalkingAgent ):
                         else:
                             res = [ result ]
                         for r in res:
-                            self.output_callback( r )
+                            await self.output_callback( r )
                 not_available = False
             except Exception as e:
                 await asyncio.sleep( 0.2 )
@@ -231,7 +231,7 @@ class APiBaseAgent( APiTalkingAgent ):
                             else:
                                 res = [ resp ]
                             for r in res:
-                                self.output_callback( r )
+                                await self.output_callback( r )
                         except asyncio.TimeoutError:
                             not_timeout = False
                     error = False
@@ -244,7 +244,7 @@ class APiBaseAgent( APiTalkingAgent ):
                 await asyncio.sleep( 0.2 )
 
 
-    def read_nc( self, host, port, udp=False ):
+    async def read_nc( self, host, port, udp=False ):
         '''
         Method reading from NETCAT socket and calling callback method.
         host - host
@@ -271,7 +271,7 @@ class APiBaseAgent( APiTalkingAgent ):
                     else:
                         res = [ result ]
                     for r in res:
-                        self.output_callback( r )
+                        await self.output_callback( r )
                 elif self.input_ended:
                     raise Exception( 'Done' )
             except Exception as e:
@@ -636,7 +636,7 @@ class APiBaseAgent( APiTalkingAgent ):
         except Exception as e:
             pass
         
-    def input_http( self, data, callback=False ):
+    async def input_http( self, data, callback=False ):
         if self.input_value_type == 'BINARY':
             data = data.encode( 'utf-8' )
         if self.input_delimiter:
@@ -656,7 +656,7 @@ class APiBaseAgent( APiTalkingAgent ):
                         else:
                             out = [ result ]
                         for i in out:
-                            self.output_callback( i )
+                            await self.output_callback( i )
                     error = False
                 except Exception as e:
                     sleep( 0.2 )
@@ -798,7 +798,7 @@ class APiBaseAgent( APiTalkingAgent ):
                         else:
                             resp = [ resp ]
                         for i in resp:
-                            self.output_callback( i )
+                            await self.output_callback( i )
                     error = False
             except Exception as e:
                 sleep( 0.2 )
@@ -899,7 +899,7 @@ class APiBaseAgent( APiTalkingAgent ):
         except Exception as e:
             pass
                 
-    def input_nc( self, data, callback=False ):
+    async def input_nc( self, data, callback=False ):
         if self.input_value_type == 'BINARY':
             data = data.encode( 'utf-8' )
         if data == self.input_end:
@@ -922,7 +922,7 @@ class APiBaseAgent( APiTalkingAgent ):
                         else:
                             result = [ result ]
                         for j in result:
-                            self.output_callback( j )
+                            await self.output_callback( j )
                     
             except Exception as e:
                 self.nc_client.close()
@@ -1003,7 +1003,7 @@ class APiBaseAgent( APiTalkingAgent ):
         except Exception as e:
             pass
 
-    def service_quit( self, msg='' ):
+    async def service_quit( self, msg='' ):
         '''
         Service quitting and clean up method. Joins all threads and
         kills all running processes (services).
@@ -1102,7 +1102,7 @@ class APiBaseAgent( APiTalkingAgent ):
         metadata[ 'status' ] = 'finished'
         metadata[ 'error-message' ] = 'null'
 
-        asyncio.ensure_future( self.schedule_message( self.holon, metadata=metadata ) )
+        await self.schedule_message( self.holon, metadata=metadata )
         
         
         
