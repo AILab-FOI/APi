@@ -221,7 +221,7 @@ class APiAgent( APiBaseAgent ):
         if args != None and args[ 'protocol' ]:
             self.agent_args[ 'protocol' ] = args[ 'protocol' ]
     
-    def output_callback( self, data ):
+    async def output_callback( self, data ):
         '''
         Output callback method.
         data - data read from service.
@@ -243,7 +243,7 @@ class APiAgent( APiBaseAgent ):
                     print( 'TRYING TO RECONNECT' )
                     srv[ 'socket' ] = nclib.Netcat( ( srv[ 'server' ], srv[ 'port' ] ), udp=is_udp )
         if data == self.output_delimiter: # TODO: Verify this
-            self.service_quit( 'End of output' )
+            await self.service_quit( 'End of output' )
                     
 
     def subscribe_to_channel( self, channel, channel_type ):
