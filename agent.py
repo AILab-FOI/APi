@@ -6,7 +6,7 @@ import argparse
 class APiAgent( APiBaseAgent ):
     '''Service wrapper agent.'''
 
-    def __init__( self, agentname, name, password, holon, token, args={}, flows=[] ):
+    def __init__( self, agentname, name, password, holon, holon_name, token, args={}, flows=[] ):
         '''
         Constructor.
         agentname - name as in agent definition (.ad) file.
@@ -25,6 +25,7 @@ class APiAgent( APiBaseAgent ):
         super().__init__( name, password, token )
         
         self.agentname = agentname
+        self.holon_name = holon_name
         self.holon = holon
         self._load( fh )
         self.read_args( args )
@@ -45,6 +46,11 @@ class APiAgent( APiBaseAgent ):
         # LHS it is an output. If self isn't present
         # then it is a forward (not processed LHS input is
         # forwarded directly to RHS output)
+        self.environment = None
+        for i in self.flows:
+            if ( i[0] == self.holon_name or i[1] == self.holon_name ) and not i[2] == None:
+                self.environment = { 'name': self.holon_name, 'io_type': i[2] }
+                break
         self.input_channels = set( i[ 0 ] for i in self.flows if i[ 1 ] == 'self' )
         self.output_channels = set( i[ 1 ] for i in self.flows if i[ 0 ] == 'self' )
         self.forward_channels = set( i for i in self.flows if i[ 0 ] != 'self' and i[ 1 ] != 'self' )
@@ -541,6 +547,14 @@ class APiAgent( APiBaseAgent ):
                     metadata[ 'reply-with' ] = str( uuid4().hex )
                     metadata[ 'channel' ] = out
                     await self.agent.schedule_message( self.agent.holon, metadata=metadata )
+            if not self.environment == None:
+                self.agent.say( 'Looking up environment', self.environment, 'in addressbook' )
+                metadata = self.agent.query_msg_template
+                metadata[ 'reply-with' ] = str( uuid4().hex )
+                metadata[ 'channel' ] = self.environment
+                await self.agent.schedule_message( self.agent.holon, metadata=metadata )
+                
+
 
     class SubscribeToInputChannels( OneShotBehaviour ):
         async def run( self ):
@@ -566,8 +580,30 @@ class APiAgent( APiBaseAgent ):
                 metadata = self.agent.attach_msg_template
                 metadata[ 'reply-with' ] = str( uuid4().hex )
                 await self.agent.schedule_message( channel, metadata=metadata )
-        
-    
+                
+    class SubscribeToEnvironment( OneShotBehaviour ):
+        async def run( self ):
+            # await self.agent.behaviour_gca.join()
+            self.agent.say( 'Subscribing to environment:', self.agent.environment )
+
+            while self.agent.environment not in self.agent.address_book:
+                await asyncio.sleep( 0.1 )
+            environment = self.agent.address_book[ self.agent.environment ]
+            metadata = self.agent.subscribe_msg_template
+            metadata[ 'reply-with' ] = str( uuid4().hex )
+            await self.agent.schedule_message( environment, metadata=metadata )
+
+    class AttachToEnvironment( OneShotBehaviour ):
+        async def run( self ):
+            # await self.agent.behaviour_stic.join()
+            self.agent.say( 'Attaching to environment', self.agent.environment )
+
+            while self.agent.environment not in self.agent.address_book:
+                await asyncio.sleep( 0.1 )
+            environment = self.agent.address_book[ self.agent.environment ]
+            metadata = self.agent.attach_msg_template
+            metadata[ 'reply-with' ] = str( uuid4().hex )
+            await self.agent.schedule_message( environment, metadata=metadata )
 
     class QueryChannels( CyclicBehaviour ):
         '''Ask holon for channel addresses'''
@@ -699,9 +735,10 @@ if __name__ == '__main__':
     parser.add_argument( 'address', metavar='ADDRESS', type=str, help="Agent's XMPP/JID address" )
     parser.add_argument( 'password', metavar='PWD', type=str, help="Agent's XMPP/JID password" )
     parser.add_argument( 'holon', metavar='HOLON', type=str, help="Agent's instantiating holon's XMPP/JID address" )
+    parser.add_argument( 'holon_name', metavar='HOLON_NAME', type=str, help="Agent's instantiating holon's name" )
     parser.add_argument( 'token', metavar='TOKEN', type=str, help="Agent's security token" )
     parser.add_argument( 'args', metavar='ARGS', type=str, help="Agent's instantiation arguments" )
     parser.add_argument( 'flows', metavar='FLOWS', type=str, help="Agent's communication flows" )
 
     args = parser.parse_args()
-    main( args.name, args.address, args.password, args.holon, args.token, args.args, args.flows )
+    main( args.name, args.address, args.password, args.holon, args.holon_name, args.token, args.args, args.flows )
