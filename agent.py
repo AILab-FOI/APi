@@ -495,7 +495,13 @@ class APiAgent( APiBaseAgent ):
         self.add_behaviour( self.behaviour_stic )
 
         self.behaviour_atoc = self.AttachToOutputChannels()
-        self.add_behaviour( self.behaviour_atoc )
+        self.add_behaviour( self.behaviour_atoc )        
+        
+        self.behaviour_ste = self.SubscribeToEnvironment()
+        self.add_behaviour( self.behaviour_ste )        
+
+        self.behaviour_ate = self.AttachToEnvironment()
+        self.add_behaviour( self.behaviour_ate )
         
         self.behaviour_qc = self.QueryChannels()
         bqc_template = Template(
@@ -583,7 +589,7 @@ class APiAgent( APiBaseAgent ):
                 
     class SubscribeToEnvironment( OneShotBehaviour ):
         async def run( self ):
-            # await self.agent.behaviour_gca.join()
+            await self.agent.behaviour_atoc.join()
             self.agent.say( 'Subscribing to environment:', self.agent.environment )
 
             while self.agent.environment not in self.agent.address_book:
@@ -595,7 +601,7 @@ class APiAgent( APiBaseAgent ):
 
     class AttachToEnvironment( OneShotBehaviour ):
         async def run( self ):
-            # await self.agent.behaviour_stic.join()
+            await self.agent.behaviour_ste.join()
             self.agent.say( 'Attaching to environment', self.agent.environment )
 
             while self.agent.environment not in self.agent.address_book:
