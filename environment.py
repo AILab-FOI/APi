@@ -149,6 +149,7 @@ class APiEnvironment( APiBaseAgent ):
             if self.agent.attach_servers:
                 for entry in self.agent.attach_servers:
                     srv = entry[ 'srv' ]
+                    #T TODO: properly convert i/o based on the name
                     io_name = entry[ 'io_name' ]
 
                     srv.sock.settimeout( 0.1 )

@@ -49,7 +49,7 @@ class APiAgent( APiBaseAgent ):
         self.environment = None
         for i in self.flows:
             if ( i[0] == self.holon_name or i[1] == self.holon_name ) and not i[2] == None:
-                self.environment = { 'name': self.holon_name, 'io_type': i[2] }
+                self.environment = { 'name': self.holon_name, 'io_name': i[2] }
                 break
         self.input_channels = set( i[ 0 ] for i in self.flows if i[ 1 ] == 'self' )
         self.output_channels = set( i[ 1 ] for i in self.flows if i[ 0 ] == 'self' )
@@ -554,10 +554,10 @@ class APiAgent( APiBaseAgent ):
                     metadata[ 'channel' ] = out
                     await self.agent.schedule_message( self.agent.holon, metadata=metadata )
             if not self.environment == None:
-                self.agent.say( 'Looking up environment', self.environment, 'in addressbook' )
+                self.agent.say( 'Looking up environment', self.environment.name, 'in addressbook' )
                 metadata = self.agent.query_msg_template
                 metadata[ 'reply-with' ] = str( uuid4().hex )
-                metadata[ 'channel' ] = self.environment
+                metadata[ 'channel' ] = self.environment.name
                 await self.agent.schedule_message( self.agent.holon, metadata=metadata )
                 
 
@@ -590,26 +590,30 @@ class APiAgent( APiBaseAgent ):
     class SubscribeToEnvironment( OneShotBehaviour ):
         async def run( self ):
             await self.agent.behaviour_atoc.join()
-            self.agent.say( 'Subscribing to environment:', self.agent.environment )
+            if not self.agent.environment == None:
+                self.agent.say( 'Subscribing to environment:', self.agent.environment.name )
 
-            while self.agent.environment not in self.agent.address_book:
-                await asyncio.sleep( 0.1 )
-            environment = self.agent.address_book[ self.agent.environment ]
-            metadata = self.agent.subscribe_msg_template
-            metadata[ 'reply-with' ] = str( uuid4().hex )
-            await self.agent.schedule_message( environment, metadata=metadata )
+                while self.agent.environment.name not in self.agent.address_book:
+                    await asyncio.sleep( 0.1 )
+                environment = self.agent.address_book[ self.agent.environment ]
+                metadata = self.agent.subscribe_msg_template
+                metadata[ 'reply-with' ] = str( uuid4().hex )
+                metadata[ 'io-name' ] = self.agent.environment[ 'io_name' ]
+                await self.agent.schedule_message( environment, metadata=metadata )
 
     class AttachToEnvironment( OneShotBehaviour ):
         async def run( self ):
             await self.agent.behaviour_ste.join()
-            self.agent.say( 'Attaching to environment', self.agent.environment )
+            if not self.agent.environment == None:
+                self.agent.say( 'Attaching to environment', self.agent.environment.name )
 
-            while self.agent.environment not in self.agent.address_book:
-                await asyncio.sleep( 0.1 )
-            environment = self.agent.address_book[ self.agent.environment ]
-            metadata = self.agent.attach_msg_template
-            metadata[ 'reply-with' ] = str( uuid4().hex )
-            await self.agent.schedule_message( environment, metadata=metadata )
+                while self.agent.environment.name not in self.agent.address_book:
+                    await asyncio.sleep( 0.1 )
+                environment = self.agent.address_book[ self.agent.environment.name ]
+                metadata = self.agent.attach_msg_template
+                metadata[ 'reply-with' ] = str( uuid4().hex )
+                metadata[ 'io-name' ] = self.agent.environment[ 'io_name' ]
+                await self.agent.schedule_message( environment, metadata=metadata )
 
     class QueryChannels( CyclicBehaviour ):
         '''Ask holon for channel addresses'''
