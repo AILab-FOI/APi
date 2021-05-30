@@ -72,6 +72,7 @@ class APiHolon( APiTalkingAgent ):
         address, password = self.registrar.register( agent[ 'name' ] )
         agent[ 'cmd' ] = 'python3 ../agent.py "%s" "%s" "%s" "%s" "%s" "%s" "%s"' % ( agent[ 'name' ], address, password, self.address, self.holonname, self.token, json.dumps( agent[ 'args' ] ).replace('"','\\"'), json.dumps( agent[ 'flows' ] ).replace('"','\\"') )
         agent[ 'address' ] = address
+        # TODO: properly handle status change
         agent[ 'status' ] = 'setup'
         self.agents[ agent[ 'name' ] ] = agent
 
