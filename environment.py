@@ -103,6 +103,7 @@ class APiEnvironment( APiBaseAgent ):
                     metadata[ 'in-reply-to' ] = msg.metadata[ 'reply-with' ]
                     metadata[ 'agent' ] = self.agent.channelname
                     req_protocol = msg.metadata[ 'protocol' ]
+                    print(msg.metadata[ 'io-name' ])
                     if msg.metadata[ 'performative' ] == 'subscribe':
                         metadata[ 'type' ] = 'input'
                         server, port, protocol = self.agent.get_server( 'subscribe', req_protocol, msg.metadata[ 'io-name' ] )

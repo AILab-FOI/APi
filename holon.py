@@ -16,7 +16,8 @@ class APiHolon( APiTalkingAgent ):
         self.registrar = APiRegistrationService( holonname )
 
         self.environment = None
-        self.setup_environment( environment )
+        if not environment == None:
+            self.setup_environment( environment )
 
         self.channels = {}
         for c in channels:
@@ -70,7 +71,7 @@ class APiHolon( APiTalkingAgent ):
                  be specified in the agent definition file (.ag).'''
         self.say( 'Registering agent', agent[ 'name' ] )
         address, password = self.registrar.register( agent[ 'name' ] )
-        agent[ 'cmd' ] = 'python3 ../agent.py "%s" "%s" "%s" "%s" "%s" "%s" "%s"' % ( agent[ 'name' ], address, password, self.address, self.holonname, self.token, json.dumps( agent[ 'args' ] ).replace('"','\\"'), json.dumps( agent[ 'flows' ] ).replace('"','\\"') )
+        agent[ 'cmd' ] = 'python3 ../agent.py "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s"' % ( agent[ 'name' ], address, password, self.address, self.holonname, self.token, json.dumps( agent[ 'args' ] ).replace('"','\\"'), json.dumps( agent[ 'flows' ] ).replace('"','\\"') )
         agent[ 'address' ] = address
         # TODO: properly handle status change
         agent[ 'status' ] = 'setup'
@@ -120,6 +121,13 @@ class APiHolon( APiTalkingAgent ):
         def start( cmd ):
             return sp.Popen( cmd, stderr=sp.STDOUT, start_new_session=True )
             
+        if not self.environment == None:
+            cmd = shlex.split( self.environment[ 'cmd' ] )
+            print( 'Running environment with:', cmd )
+            self.environment[ 'instance' ] = Thread( target=start, args=( cmd, ) )
+            self.environment[ 'instance' ].start()
+            self.environment[ 'status' ] = 'started'
+
         for c in self.channels.values():
             cmd = shlex.split( c[ 'cmd' ] )
             print( 'Running channel with:', cmd )
