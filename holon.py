@@ -99,7 +99,7 @@ class APiHolon( APiTalkingAgent ):
         environment[ 'holon_name' ] = self.holonname
         environment[ 'name' ] = f'{self.holonname}-environment'
         address, password = self.registrar.register( environment[ 'name' ] )
-        environment[ 'cmd' ] = 'python3 ../environment.py "%s" "%s" "%s" "%s" "%s" "%s" "%s"' % ( environment[ 'name' ], address, password, self.address, self.token, json.dumps( env_spec ).replace('"','\\"') )
+        environment[ 'cmd' ] = 'python3 ../environment.py "%s" "%s" "%s" "%s" "%s" "%s"' % ( environment[ 'name' ], address, password, self.address, self.token, json.dumps( env_spec ).replace('"','\\"') )
         environment[ 'address' ] = address
         environment[ 'status' ] = 'setup'
         self.environment = environment
