@@ -597,10 +597,6 @@ class APiAgent( APiBaseAgent ):
         async def run( self ):
             await self.agent.behaviour_atoc.join()
             if not self.agent.environment == None and "read" in self.agent.environment[ 'types' ]:
-                print("dararaa")
-                print("dararaa")
-                print("dararaa")
-                print("dararaa")
                 self.agent.say( 'Subscribing to environment:', self.agent.environment[ 'name' ] )
 
                 while self.agent.environment[ 'name' ] not in self.agent.address_book:
@@ -609,17 +605,12 @@ class APiAgent( APiBaseAgent ):
                 metadata = self.agent.subscribe_msg_template
                 metadata[ 'reply-with' ] = str( uuid4().hex )
                 metadata[ 'io-name' ] = self.agent.environment[ 'io_name' ]
-                print(environment)
                 await self.agent.schedule_message( environment, metadata=metadata )
 
     class AttachToEnvironment( OneShotBehaviour ):
         async def run( self ):
             await self.agent.behaviour_ste.join()
             if not self.agent.environment == None and "write" in self.agent.environment[ 'types' ]:
-                print("rolkaa")
-                print("rolkaa")
-                print("rolkaa")
-                print("rolkaa")
                 self.agent.say( 'Attaching to environment', self.agent.environment[ 'name' ] )
 
                 while self.agent.environment[ 'name' ] not in self.agent.address_book:
