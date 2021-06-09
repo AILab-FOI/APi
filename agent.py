@@ -6,7 +6,7 @@ import argparse
 class APiAgent( APiBaseAgent ):
     '''Service wrapper agent.'''
 
-    def __init__( self, agentname, name, password, holon, token, args={}, flows=[] ):
+    def __init__( self, agentname, name, password, holon, holon_name, token, args={}, flows=[] ):
         '''
         Constructor.
         agentname - name as in agent definition (.ad) file.
@@ -25,13 +25,14 @@ class APiAgent( APiBaseAgent ):
         super().__init__( name, password, token )
         
         self.agentname = agentname
+        self.holon_name = holon_name
         self.holon = holon
         self._load( fh )
         self.read_args( args )
 
         self.flows = []
         for f in flows:
-            if len( f ) > 2:
+            if len( f ) == 2:
                 pairs = [ i for i in pairwise( f ) ]
                 self.flows.extend( pairs )
             else:
@@ -45,9 +46,20 @@ class APiAgent( APiBaseAgent ):
         # LHS it is an output. If self isn't present
         # then it is a forward (not processed LHS input is
         # forwarded directly to RHS output)
-        self.input_channels = set( i[ 0 ] for i in self.flows if i[ 1 ] == 'self' )
-        self.output_channels = set( i[ 1 ] for i in self.flows if i[ 0 ] == 'self' )
-        self.forward_channels = set( i for i in self.flows if i[ 0 ] != 'self' and i[ 1 ] != 'self' )
+        self.environment = None
+        for i in self.flows:
+            if len( i ) == 3 and ( i[0] == self.holon_name or i[1] == self.holon_name ):
+                if self.environment == None:
+                    self.environment = { 'name': self.holon_name, 'io_name': i[2], 'types': [] }
+
+                if i[ 0 ] == self.holon_name and not "write" in self.environment[ 'types' ]:
+                    self.environment[ 'types' ].append( "write" )
+                elif i[ 1 ] == self.holon_name and not "read" in self.environment[ 'types' ]:
+                    self.environment[ 'types' ].append( "read" )
+                
+        self.input_channels = set( i[ 0 ] for i in self.flows if i[ 1 ] == 'self' and len( i ) == 2 )
+        self.output_channels = set( i[ 1 ] for i in self.flows if i[ 0 ] == 'self' and len( i ) == 2 )
+        self.forward_channels = set( i for i in self.flows if i[ 0 ] != 'self' and i[ 1 ] != 'self' and len( i ) == 2)
 
         print( self.flows )
         print( self.input_channels )
@@ -489,7 +501,13 @@ class APiAgent( APiBaseAgent ):
         self.add_behaviour( self.behaviour_stic )
 
         self.behaviour_atoc = self.AttachToOutputChannels()
-        self.add_behaviour( self.behaviour_atoc )
+        self.add_behaviour( self.behaviour_atoc )        
+        
+        self.behaviour_ste = self.SubscribeToEnvironment()
+        self.add_behaviour( self.behaviour_ste )        
+
+        self.behaviour_ate = self.AttachToEnvironment()
+        self.add_behaviour( self.behaviour_ate )
         
         self.behaviour_qc = self.QueryChannels()
         bqc_template = Template(
@@ -541,6 +559,14 @@ class APiAgent( APiBaseAgent ):
                     metadata[ 'reply-with' ] = str( uuid4().hex )
                     metadata[ 'channel' ] = out
                     await self.agent.schedule_message( self.agent.holon, metadata=metadata )
+            if not self.agent.environment == None:
+                self.agent.say( 'Looking up environment', self.agent.environment[ 'name' ], 'in addressbook' )
+                metadata = self.agent.query_msg_template
+                metadata[ 'reply-with' ] = str( uuid4().hex )
+                metadata[ 'channel' ] = self.agent.environment[ 'name' ]
+                await self.agent.schedule_message( self.agent.holon, metadata=metadata )
+                
+
 
     class SubscribeToInputChannels( OneShotBehaviour ):
         async def run( self ):
@@ -566,8 +592,34 @@ class APiAgent( APiBaseAgent ):
                 metadata = self.agent.attach_msg_template
                 metadata[ 'reply-with' ] = str( uuid4().hex )
                 await self.agent.schedule_message( channel, metadata=metadata )
-        
-    
+                
+    class SubscribeToEnvironment( OneShotBehaviour ):
+        async def run( self ):
+            await self.agent.behaviour_atoc.join()
+            if not self.agent.environment == None and "read" in self.agent.environment[ 'types' ]:
+                self.agent.say( 'Subscribing to environment:', self.agent.environment[ 'name' ] )
+
+                while self.agent.environment[ 'name' ] not in self.agent.address_book:
+                    await asyncio.sleep( 0.1 )
+                environment = self.agent.address_book[ self.agent.environment[ 'name' ] ]
+                metadata = self.agent.subscribe_msg_template
+                metadata[ 'reply-with' ] = str( uuid4().hex )
+                metadata[ 'io-name' ] = self.agent.environment[ 'io_name' ]
+                await self.agent.schedule_message( environment, metadata=metadata )
+
+    class AttachToEnvironment( OneShotBehaviour ):
+        async def run( self ):
+            await self.agent.behaviour_ste.join()
+            if not self.agent.environment == None and "write" in self.agent.environment[ 'types' ]:
+                self.agent.say( 'Attaching to environment', self.agent.environment[ 'name' ] )
+
+                while self.agent.environment[ 'name' ] not in self.agent.address_book:
+                    await asyncio.sleep( 0.1 )
+                environment = self.agent.address_book[ self.agent.environment[ 'name' ] ]
+                metadata = self.agent.attach_msg_template
+                metadata[ 'reply-with' ] = str( uuid4().hex )
+                metadata[ 'io-name' ] = self.agent.environment[ 'io_name' ]
+                await self.agent.schedule_message( environment, metadata=metadata )
 
     class QueryChannels( CyclicBehaviour ):
         '''Ask holon for channel addresses'''
@@ -686,11 +738,11 @@ class APiAgent( APiBaseAgent ):
                     self.agent.say( 'Message could not be verified. IMPOSTER!!!!!!' )
 
 
-def main( name, address, password, holon, token, args, flows ):
+def main( name, address, password, holon, holon_name, token, args, flows ):
     args = json.loads( args )
     flows = json.loads( flows )
-    flows = [ ( i[ 0 ], i[ 1 ] ) for i in flows ]
-    a = APiAgent( name, address, password, holon, token, args, flows )
+    flows = [ ( i[ 0 ], i[ 1 ] ) if len(i) == 2 else ( i[ 0 ], i[ 1 ], i[ 2 ] ) for i in flows ]
+    a = APiAgent( name, address, password, holon, holon_name, token, args, flows )
     a.start()
 
 if __name__ == '__main__':
@@ -699,9 +751,11 @@ if __name__ == '__main__':
     parser.add_argument( 'address', metavar='ADDRESS', type=str, help="Agent's XMPP/JID address" )
     parser.add_argument( 'password', metavar='PWD', type=str, help="Agent's XMPP/JID password" )
     parser.add_argument( 'holon', metavar='HOLON', type=str, help="Agent's instantiating holon's XMPP/JID address" )
+    parser.add_argument( 'holon_name', metavar='HOLON_NAME', type=str, help="Agent's instantiating holon's name" )
     parser.add_argument( 'token', metavar='TOKEN', type=str, help="Agent's security token" )
     parser.add_argument( 'args', metavar='ARGS', type=str, help="Agent's instantiation arguments" )
     parser.add_argument( 'flows', metavar='FLOWS', type=str, help="Agent's communication flows" )
 
     args = parser.parse_args()
-    main( args.name, args.address, args.password, args.holon, args.token, args.args, args.flows )
+
+    main( args.name, args.address, args.password, args.holon, args.holon_name, args.token, args.args, args.flows )

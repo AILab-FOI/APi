@@ -15,7 +15,9 @@ class APiHolon( APiTalkingAgent ):
         self.namespace = APiNamespace()
         self.registrar = APiRegistrationService( holonname )
 
-        self.setup_environment( environment )
+        self.environment = None
+        if not environment == None:
+            self.setup_environment( environment )
 
         self.channels = {}
         for c in channels:
@@ -69,8 +71,9 @@ class APiHolon( APiTalkingAgent ):
                  be specified in the agent definition file (.ag).'''
         self.say( 'Registering agent', agent[ 'name' ] )
         address, password = self.registrar.register( agent[ 'name' ] )
-        agent[ 'cmd' ] = 'python3 ../agent.py "%s" "%s" "%s" "%s" "%s" "%s" "%s"' % ( agent[ 'name' ], address, password, self.address, self.token, json.dumps( agent[ 'args' ] ).replace('"','\\"'), json.dumps( agent[ 'flows' ] ).replace('"','\\"') )
+        agent[ 'cmd' ] = 'python3 ../agent.py "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s"' % ( agent[ 'name' ], address, password, self.address, self.holonname, self.token, json.dumps( agent[ 'args' ] ).replace('"','\\"'), json.dumps( agent[ 'flows' ] ).replace('"','\\"') )
         agent[ 'address' ] = address
+        # TODO: properly handle status change
         agent[ 'status' ] = 'setup'
         self.agents[ agent[ 'name' ] ] = agent
 
@@ -92,7 +95,15 @@ class APiHolon( APiTalkingAgent ):
     def setup_environment( self, env_spec ):
         # TODO: implement setting up environment
         #       channels (input + output)
-        pass
+        self.say( 'Registering environment' )
+        environment = {}
+        environment[ 'holon_name' ] = self.holonname
+        environment[ 'name' ] = f'{self.holonname}-environment'
+        address, password = self.registrar.register( environment[ 'name' ] )
+        environment[ 'cmd' ] = 'python3 ../environment.py "%s" "%s" "%s" "%s" "%s" "%s"' % ( environment[ 'name' ], address, password, self.address, self.token, json.dumps( env_spec ).replace('"','\\"') )
+        environment[ 'address' ] = address
+        environment[ 'status' ] = 'setup'
+        self.environment = environment
 
     def setup_execution( self, execution_plan ):
         # TODO: Design and implement execution plans
@@ -110,6 +121,13 @@ class APiHolon( APiTalkingAgent ):
         def start( cmd ):
             return sp.Popen( cmd, stderr=sp.STDOUT, start_new_session=True )
             
+        if not self.environment == None:
+            cmd = shlex.split( self.environment[ 'cmd' ] )
+            print( 'Running environment with:', cmd )
+            self.environment[ 'instance' ] = Thread( target=start, args=( cmd, ) )
+            self.environment[ 'instance' ].start()
+            self.environment[ 'status' ] = 'started'
+
         for c in self.channels.values():
             cmd = shlex.split( c[ 'cmd' ] )
             print( 'Running channel with:', cmd )
@@ -182,11 +200,14 @@ class APiHolon( APiTalkingAgent ):
                     metadata[ 'agent' ] = channel
 
                     try:
-                        ch_address = self.agent.channels[ channel ][ 'address' ]
-                        self.agent.say( 'Found channel', channel, 'address is', ch_address )
+                        if channel == self.agent.environment[ 'holon_name' ]:
+                            address = self.agent.environment[ 'address' ]
+                        else:
+                            address = self.agent.channels[ channel ][ 'address' ]
+                        self.agent.say( 'Found channel', channel, 'address is', address )
 
                         metadata[ 'success' ] = 'true'
-                        metadata[ 'address' ] = ch_address
+                        metadata[ 'address' ] = address
                     except KeyError:
                         self.agent.say( 'Channel', channel, 'not found' )
                         metadata[ 'success' ] = 'false'
