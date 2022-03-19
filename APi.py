@@ -27,8 +27,7 @@ Awkward π-nguin %s : Microservice orchestration language
 ------------------------------------------------------------
 ''' % __version__
 
-def process( stream ):
-    lexer = APiLexer( stream )
+def process( lexer ):
     lexer.recover = lambda x: sys.exit()
     stream = CommonTokenStream( lexer )
     parser = APiParser( stream )
@@ -36,10 +35,8 @@ def process( stream ):
     printer = APi()
     walker = ParseTreeWalker()
     walker.walk( printer, tree )
-    try:
-        return parser.STACK[ -1 ]
-    except:
-        pass # TODO: remove exception handling when all parts of parser are implemented
+    
+    return printer.get_ns()
     
 
 BYE = 'Bye!'
@@ -47,38 +44,21 @@ def main():
     if len( sys.argv ) > 2:
         print( 'Usage: APi [filename.api]' )
     else:
+        ns = None
+
         if len( sys.argv ) == 2:
             fl = sys.argv[ 1 ]
             stream = FileStream( fl, encoding='utf-8' )
-            process( stream )            
+            lexer = APiLexer( stream )
+            ns = process( lexer )
         else:
             print( splash )
-            while True:
-                try:
-                    command = input( "Aπ :- " )
-                except:
-                    print( '\n%s!' % BYE )
-                    quit_spade()
-                    sys.exit()
-                
-                if command == "exit":
-                    print( '%s!' % BYE )
-                    quit_spade()
-                    break
-                elif command == '':
-                    continue
-                elif command.strip()[ -1 ] == ':':
-                    line = input( '|' )
-                    command += '\n' + line
-                    while line[ 0 ] == '\t':
-                        line = input( '|' )
-                        command += '\n' + line
-                        if not line:
-                            break
-                    
-                if command:
-                    stream = InputStream( command + '\n' )
-                    process( stream )
+            lexer = APiLexer( StdinStream() )
+            ns = process( lexer )
+
+        print( ns )
+            
+            
 
 def initialize():
     global BYE
