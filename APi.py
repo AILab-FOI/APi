@@ -40,7 +40,7 @@ def process( lexer ):
     
 
 BYE = 'Bye!'
-def main():
+def generate_namespace():
     if len( sys.argv ) > 2:
         print( 'Usage: APi [filename.api]' )
     else:
@@ -56,7 +56,7 @@ def main():
             lexer = APiLexer( StdinStream() )
             ns = process( lexer )
 
-        print( ns )
+        return ns
             
             
 
@@ -68,76 +68,20 @@ def initialize():
                     
 if __name__ == '__main__':
     initialize()
-    ns = APiNamespace()
 
     # TESTING
     os.chdir('test')
-    rs = APiRegistrationService( 'APi-test' )
-    #a1, a1pass = rs.register( 'ivek' )
-    #a2, a2pass = rs.register( 'joza' )
-    #c1, c1pass = rs.register( 'stefica' )
-
-    #a = APiAgent( 'bla_stdin_stdout', a1 + '@rec.foi.hr', a1pass, flows=[ ( 'self', 'c' ) ] )
-    #b = APiAgent( 'bla_stdin_ws', a2 + '@rec.foi.hr', a2pass, flows=[ ( 'c', 'self' ) ] )
-    #c = APiChannel( 'c', c1 + '@rec.foi.hr', c1pass, channel_input='regex( x is (?P<act>[0-9]+) )', channel_output="{ 'action':?act, 'history':?act }" )
-
-    #ns[ 'agents' ][ 'a' ] = a
-    #ns[ 'agents' ][ 'b' ] = b
-    #ns[ 'channels' ][ 'c' ] = c
-
-    #c.start()
-
-    h1name, h1password = rs.register( 'holonko1' )
-    agents = [ { 'name':'bla_stdin_stdout', 'flows':[ ( 'c', 'self' ), ( 'self', 'd' ), ( 'self', 'holonko1', 'io-1' ) ], 'args':{'protocol': 'tcp'} }, { 'name':'bla_stdin_http', 'flows':[ ( 'd', 'self' ) ], 'args':{'protocol': 'tcp'} }, { 'name':'bla_file_stdout', 'flows':[ ( 'self', 'c' ) ], 'args':{'protocol': 'tcp'} } ]
-    channels = [ { 'name':'c', 'input':'regex( (?P<act>.*) )', 'output':"?act", 'transformer':None }, { 'name':'d', 'input':'regex( (?P<act>.*) )', 'output':"{ 'action':'?act', 'history':'?act' }", 'transformer':None } ]
-    environment = [ { 'name': 'io-1', 'input': "{ 'val1': ?x }", 'output': "{ 'val2': ?y }" } ]
-    holons = []
+    ns = generate_namespace()
+    agents = ns.get("agents", [])
+    channels = ns.get("channels", [])
+    holons = ns.get("holons", [])
+    environment = ns.get("environment", [])
     execution_plan = None
-    print( h1name )
+
+    rs = APiRegistrationService( 'APi-test' )
+    h1name, h1password = rs.register( 'holonko1' )
     h1 = APiHolon( 'holonko1', h1name, h1password, agents, channels, environment, holons, execution_plan )
     h1.start()
-    
-
-    
-    #a = APiAgent( 'bla_ws_ws', 'bla0agent@dragon.foi.hr', 'tajna', flows=[ ('a', 'self'), ('self', 'c'), ('d', 'e', 'NIL'), ('b','VOID') ] ) # ('STDIN', 'self'),  ('self', 'STDOUT'),
-
-    
-    '''
-    sleep( 1 )
-    a.input( 'avauhu\nguhu\nbuhu\nwuhu\ncuhu\n' )
-    sleep( 1 )
-    a.input( 'juhu\n' )
-    sleep( 1 )
-    a.input( 'muhu\n' )
-    a.input( 'ahu\n' )
-    sleep( 1 )
-    a.input( 'puhu\nluhu\n' )
-    sleep( 1 )
-    a.input( '<!eof!>' )'''
-    
-    #a.start_shell_client( await_stdin=True, print_stdout=True, print_stderr=True )
-    
-
-    #c = APiChannel( 'test', 'bla0agent@dragon.foi.hr', 'tajna', channel_input='regex( x is (?P<act>[0-9]+) )', channel_output="{ 'action':?act, 'history':?act }" )
-
-    #print( c.map( 'x is 247 blakaka x is 222121' ) )
-
-    #c = APiChannel( 'test', 'bla0agent@dragon.foi.hr', 'tajna', channel_input='json( { "gugu":?y, "bla":?x } )', channel_output='<bla><nana x="?x" /><y>?y</y></bla>' )
-
-    #c.start()
-    
-    #print( c.map( '{ "bla":234, "gugu":1 }' ) )
-
-    
-    #c = APiChannel( 'test', 'bla0agent@dragon.foi.hr', 'tajna' ) # TRANSPARENT CHANNEL
-
-    #print( c.map( '{ "bla":234, "gugu":1 }' ) ) 
-    
-    
-    print( ns )
-
-    
-    main()
     
     spade.quit_spade()
 
