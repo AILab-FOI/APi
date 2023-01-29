@@ -1,0 +1,9 @@
+channel c .
+agent bla_stdin_stdout :
+	c -> self
+agent bla_file_stdout :
+	self -> c
+environment :
+	input => json({ 'val1': ?x })
+	output <= json({ 'val2': y })
+
