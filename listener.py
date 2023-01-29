@@ -30,7 +30,8 @@ class APi( APiListener ):
 
     # Enter a parse tree produced by APiParser#s_environment.
     def enterS_environment(self, ctx:APiParser.S_environmentContext):
-        environment = { 'inputs': [], 'outputs': [] }
+        # TODO: currently there is no way to specify name
+        environment = { 'name': 'io-1', 'input': None, 'output': None }
         self.STACK.append( environment )
 
 
@@ -46,12 +47,14 @@ class APi( APiListener ):
 
     # Exit a parse tree produced by APiParser#iflow.
     def exitIflow(self, ctx:APiParser.IflowContext):
-        input_name = ctx.children[ 1 ].getText()
+        # input_name = ctx.children[ 1 ].getText()
         input_payload = self.STACK.pop()
-        input_flow = ( input_name, input_payload )
+        # input_flow = ( input_name, input_payload )
 
         environment = self.STACK[ -1 ]
-        environment[ 'inputs' ].append( input_flow )
+        environment[ 'input' ] = input_payload
+        # TODO: there's a problem with multi lines for some reason
+        environment[ 'output' ] = input_payload
 
 
     # Enter a parse tree produced by APiParser#oflow.
@@ -61,12 +64,12 @@ class APi( APiListener ):
 
     # Exit a parse tree produced by APiParser#oflow.
     def exitOflow(self, ctx:APiParser.OflowContext):
-        output_name = ctx.children[ 1 ].getText()
+        # output_name = ctx.children[ 1 ].getText()
         output_payload = self.STACK.pop()
-        output_flow = ( output_name, output_payload )
+        # output_flow = ( output_name, output_payload )
 
         environment = self.STACK[ -1 ]
-        environment[ 'outputs' ].append( output_flow )
+        environment[ 'output' ] = output_payload 
 
 
     # Enter a parse tree produced by APiParser#s_start.
@@ -90,7 +93,7 @@ class APi( APiListener ):
     # Enter a parse tree produced by APiParser#s_agent.
     def enterS_agent(self, ctx:APiParser.S_agentContext):
         agent_name = ctx.children[ 1 ].getText()
-        agent = { 'name': agent_name, 'flows': [] }
+        agent = { 'name': agent_name, 'flows': [], 'args': {} }
 
         self.STACK.append(agent)
 
@@ -124,7 +127,7 @@ class APi( APiListener ):
             flow.insert( 0, channel_name )
 
         agent = self.STACK[ -1 ]
-        agent[ 'flows' ].append( flow )
+        agent[ 'flows' ].append( tuple( flow ) )
 
     # Enter a parse tree produced by APiParser#valid_channel.
     def enterValid_channel(self, ctx:APiParser.Valid_channelContext):
@@ -151,11 +154,16 @@ class APi( APiListener ):
 
     # Enter a parse tree produced by APiParser#s_channel_transformer.
     def enterS_channel_transformer(self, ctx:APiParser.S_channel_transformerContext):
-        pass
+        channel_name = ctx.children[ 1 ].getText()
+        agent = { 'name': channel_name, 'input': None, 'output': None, 'transformer': None }
+        
+        self.STACK.append( agent )
 
     # Exit a parse tree produced by APiParser#s_channel_transformer.
     def exitS_channel_transformer(self, ctx:APiParser.S_channel_transformerContext):
-        pass
+        channel = self.STACK[ -1 ]
+        self.ns.add_channel( channel )
+
 
 
     # Enter a parse tree produced by APiParser#s_channel_spec.

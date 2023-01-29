@@ -33,6 +33,12 @@ class APiChannel( APiBaseAgent ):
         self.refuse_message_template[ 'performative' ] = 'refuse'
         self.refuse_message_template[ 'ontology' ] = 'APiDataTransfer'
         self.refuse_message_template[ 'auth-token' ] = self.auth
+
+        self.inform_msg_template = {}
+        self.inform_msg_template[ 'performative' ] = 'inform'
+        self.inform_msg_template[ 'ontology' ] = 'APiScheduling'
+        self.inform_msg_template[ 'type' ] = 'channel'
+        self.inform_msg_template[ 'auth-token' ] = self.auth
         
         self.input = channel_input
         self.output = channel_output
@@ -52,9 +58,8 @@ class APiChannel( APiBaseAgent ):
         
         if not self.input or not self.output:
             if self.transformer:
-                self.map = self.map_transformer
+                self.map = lambda x: eval(self.transformer)
             else:
-                # TRANSPARENT channel (default)
                 self.map = lambda x: x
         else:
             if self.transformer:
@@ -64,7 +69,7 @@ class APiChannel( APiBaseAgent ):
             
             elif self.input.startswith( 'regex( ' ):
                 reg = self.input[ 7:-2 ]
-                print( 'RE', reg )
+                # print( 'RE', reg )
                 self.input_re = re.compile( reg )
                 self.map = self.map_re
             elif self.input.startswith( 'json( ' ):
@@ -87,8 +92,7 @@ class APiChannel( APiBaseAgent ):
                 self.map = self.map_json
             elif self.input.startswith( 'xml( ' ):
                 # TODO: Implement XML
-                raise NotImplementedError( NIE )
-                
+                raise NotImplementedError( NIE )            
 
     def map( self, data ):
         pass
@@ -109,11 +113,13 @@ class APiChannel( APiBaseAgent ):
             query += 'X' + var + " = '" + val + "', "
         query = 'APIRES = ok, ' + query[ :-2 ]
         res = self.kb.query( query )
+        
         return self.format_output( res )
 
 
     def format_output( self, res ):
         output = self.output
+
         for var, val in res[ 0 ].items():
             output = output.replace( '?' + var[ 1: ], val )
         return output
@@ -199,7 +205,13 @@ class APiChannel( APiBaseAgent ):
         
         return host, str( port ), protocol
 
-
+    class StatusListening( OneShotBehaviour ):
+        async def run( self ):
+            metadata = deepcopy( self.agent.inform_msg_template )
+            metadata[ 'status' ] = 'listening'
+            metadata[ 'type' ] = 'channel'
+            await self.agent.schedule_message( self.agent.holon, metadata=metadata )
+    
     class Subscribe( CyclicBehaviour ):
         '''Agent wants to listen or write to channel'''
         async def run( self ):
@@ -226,7 +238,6 @@ class APiChannel( APiBaseAgent ):
                         metadata[ 'in-reply-to' ] = msg.metadata[ 'reply-with' ]
                         metadata[ 'reason' ] = 'unknown-message'
                         await self.agent.schedule_message( str( msg.sender ), metadata=metadata )
-
                     
                     metadata[ 'server' ] = server
                     metadata[ 'port' ] = port
@@ -239,6 +250,7 @@ class APiChannel( APiBaseAgent ):
                     metadata[ 'in-reply-to' ] = msg.metadata[ 'reply-with' ]
                     metadata[ 'reason' ] = 'security-policy'
                     await self.agent.schedule_message( str( msg.sender ), metadata=metadata )
+    
     class Forward( CyclicBehaviour ):
         '''Receive inputs, map them to outputs and send to subscribers'''
         # TODO: Test this behaviour
@@ -254,6 +266,9 @@ class APiChannel( APiBaseAgent ):
                 except Exception as e:
                     return
             
+            # Slusaju se poruke od svih agenata koji su attached, te je ovo cyclic behv jer
+            # rec_until nije awaitan, nego mora biti u loopu. nakon sto se dohvati poruka, onda
+            # se iterira kroz subscribed agente, te se njima salje result
             if self.agent.attach_servers:
                 for srv in self.agent.attach_servers:
                     srv.sock.settimeout( 0.1 )
@@ -277,6 +292,9 @@ class APiChannel( APiBaseAgent ):
                     
     async def setup(self):
         super().setup()
+
+        bsl = self.StatusListening()
+        self.add_behaviour( bsl )
             
         bsubs = self.Subscribe()
         bsubs_template = Template(

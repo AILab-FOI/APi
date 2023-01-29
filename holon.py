@@ -34,6 +34,9 @@ class APiHolon( APiTalkingAgent ):
         self.execution_plan = None
         self.setup_execution( execution_plan )
 
+        self.all_channels_listening = False
+        self.all_agents_listening = False
+
         self.all_started = False # Indicate if execution plan has been started already
         self.instantiate_all()
 
@@ -54,6 +57,7 @@ class APiHolon( APiTalkingAgent ):
         self.request_message_template[ 'auth-token' ] = self.auth
         # Add action in actual behaviour (start or stop)
 
+        # template used for ack
         self.confirm_message_template = {}
         self.confirm_message_template[ 'performative' ] = 'confirm'
         self.confirm_message_template[ 'ontology' ] = 'APiScheduling'
@@ -116,6 +120,13 @@ class APiHolon( APiTalkingAgent ):
             if agent[ 'address' ] == address:
                 return name
 
+    def channel_name_from_address( self, address ):
+        # Ugly hack
+        address = str( address )
+        for name, channel in self.channels.items():
+            if channel[ 'address' ] == address:
+                return name
+
     def instantiate_all( self ):
         # Create agent and channel instances
         def start( cmd ):
@@ -123,24 +134,24 @@ class APiHolon( APiTalkingAgent ):
             
         if not self.environment == None:
             cmd = shlex.split( self.environment[ 'cmd' ] )
-            print( 'Running environment with:', cmd )
+            self.say('Running environment:', self.environment.get('name'))
             self.environment[ 'instance' ] = Thread( target=start, args=( cmd, ) )
             self.environment[ 'instance' ].start()
             self.environment[ 'status' ] = 'started'
 
         for c in self.channels.values():
             cmd = shlex.split( c[ 'cmd' ] )
-            print( 'Running channel with:', cmd )
+            self.say( 'Running channel:', c.get('name') )
             c[ 'instance' ] = Thread( target=start, args=( cmd, ) )
             c[ 'instance' ].start()
             c[ 'status' ] = 'started'
                 
         for a in self.agents.values():
             cmd = shlex.split( a[ 'cmd' ] )
-            print( 'Running agent with:', cmd )
+            self.say( 'Running agent:', a.get('name') ) 
             a[ 'instance' ] = Thread( target=start, args=( cmd, ) )
             a[ 'instance' ].start()
-            a[ 'status' ] = 'instantiated'
+            a[ 'status' ] = 'started'
 
     async def stop( self ):
         self.say( '(Stop Agents) Stopping all agents & channels!' )
@@ -166,9 +177,21 @@ class APiHolon( APiTalkingAgent ):
         bgra_template = Template(
             metadata={ "performative": "inform",
                        "ontology": "APiScheduling",
+                       "type": "agent",
                        "status":"ready" }
         )
         self.add_behaviour( bgra, bgra_template )
+
+        bgla = self.GetListeningAgents()
+        bgla_template = Template(
+            metadata={ "performative": "inform",
+                       "ontology": "APiScheduling",
+                       "status":"listening" }
+        )
+        self.add_behaviour( bgla, bgla_template )
+
+        bal = self.AllAgentsListening()
+        self.add_behaviour( bal )
 
         bep = self.ExecutePlan()
         self.add_behaviour( bep )
@@ -194,7 +217,7 @@ class APiHolon( APiTalkingAgent ):
             if msg:
                 if self.agent.verify( msg ):
                     self.agent.say( '(QueryName) Message verified, processing ...' )
-                    channel = msg.metadata[ 'channel' ]
+                    channel = msg.metadata[ 'channel' ]                    
                     metadata = deepcopy( self.agent.query_message_template )
                     metadata[ 'in-reply-to' ] = msg.metadata[ 'reply-with' ]
                     metadata[ 'agent' ] = channel
@@ -202,7 +225,7 @@ class APiHolon( APiTalkingAgent ):
                     try:
                         if channel == self.agent.environment[ 'holon_name' ]:
                             address = self.agent.environment[ 'address' ]
-                        else:
+                        else:                            
                             address = self.agent.channels[ channel ][ 'address' ]
                         self.agent.say( 'Found channel', channel, 'address is', address )
 
@@ -220,6 +243,13 @@ class APiHolon( APiTalkingAgent ):
                     metadata[ 'in-reply-to' ] = msg.metadata[ 'reply-with' ]
                     await self.agent.schedule_message( str( msg.sender ), metadata=metadata )
 
+    """
+    Behaviour that listens to XMPP mesage that is sent from an agent when it is ready setting up.
+    Agent will communicate their status over XMPP.
+
+    Ontology: APiScheduling
+    Status: finished
+    """
     class GetReadyAgents( CyclicBehaviour ):
         async def run( self ):
             msg = await self.receive( timeout=0.1 )
@@ -235,6 +265,54 @@ class APiHolon( APiTalkingAgent ):
                     metadata = deepcopy( self.agent.refuse_message_template )
                     metadata[ 'in-reply-to' ] = msg.metadata[ 'reply-with' ]
                     await self.agent.schedule_message( str( msg.sender ), metadata=metadata )
+
+    class GetListeningAgents( CyclicBehaviour ):
+        async def run( self ):
+            msg = await self.receive( timeout=0.1 )
+            if msg:
+                if self.agent.verify( msg ):
+                    self.agent.say( '(GetListeningAgents) Message verified, processing ...' )
+                    type = msg.metadata[ 'type' ]
+                    if type == 'channel':
+                        channel = self.agent.channel_name_from_address( msg.sender.bare() )
+                        self.agent.say( '(QueryNameGetReadyChannel) Setting channel', channel, 'status to listening.' )
+                        self.agent.channels[ channel ][ 'status' ] = 'listening'
+
+                        all_ready = True
+                        for channel in self.agent.channels.values():
+                            if channel[ 'status' ] != 'listening':
+                                all_ready = False
+                                
+                        if all_ready:
+                            self.agent.all_channels_listening = True
+                    elif type == 'agent':
+                        agent = self.agent.agent_name_from_address( msg.sender.bare() )
+                        self.agent.say( '(QueryNameGetReadyAgents) Setting agent', agent, 'status to ready.' )
+                        self.agent.agents[ agent ][ 'status' ] = 'listening'
+
+                        all_ready = True
+                        for agent in self.agent.agents.values():
+                            if agent[ 'status' ] != 'ready' and agent[ 'status' ] != 'listening':
+                                all_ready = False
+                                break
+
+                            if all_ready:
+                                self.agent.all_agents_listening = True
+                else:
+                    self.agent.say( 'Message could not be verified. IMPOSTER!!!!!!' )
+                    metadata = deepcopy( self.agent.refuse_message_template )
+                    metadata[ 'in-reply-to' ] = msg.metadata[ 'reply-with' ]
+                    await self.agent.schedule_message( str( msg.sender ), metadata=metadata )
+
+    class AllAgentsListening( OneShotBehaviour ):
+        async def run( self ):
+            while (not self.agent.all_agents_listening or not self.agent.all_channels_listening):
+                await asyncio.sleep( 1 )
+            
+            metadata = deepcopy( self.agent.request_message_template )
+            metadata[ 'action' ] = 'channels_listening'
+            for agent in self.agent.agents.values():
+                await self.agent.schedule_message( agent[ 'address' ], metadata=metadata )
 
     class ExecutePlan( CyclicBehaviour ):
         async def run( self ):
@@ -256,11 +334,19 @@ class APiHolon( APiTalkingAgent ):
                         await self.agent.schedule_message( agent[ 'address' ], metadata=metadata )
                     self.agent.all_started = True
 
+    """
+    Behaviour that listens to XMPP mesage that is sent from an agent when it is finished setting up.
+    Agent will communicate their status over XMPP. Deleberatelly stopped & finished agents share the same status.
+
+    Ontology: APiScheduling
+    Status: finished
+    """
     class FinishedAgents( CyclicBehaviour ):
         async def run( self ):
             msg = await self.receive( timeout=0.1 )
             if msg:
                 if self.agent.verify( msg ):
+                    print("doneeee")
                     self.agent.say( '(FinishedAgents) Message verified, processing ...' )
                     agent = self.agent.agent_name_from_address( msg.sender.bare() )
 
@@ -270,6 +356,7 @@ class APiHolon( APiTalkingAgent ):
                         self.agent.say( 'Agent', agent, 'finished gracefully.' )
                     self.agent.agents[ agent ][ 'status' ] = 'stopped'
                     
+                    # sending message to ack that agent has stopped, so they can terminate
                     metadata = deepcopy( self.agent.confirm_message_template )
                     metadata[ 'in-reply-to' ] = msg.metadata[ 'reply-with' ]
 
@@ -281,6 +368,13 @@ class APiHolon( APiTalkingAgent ):
                     metadata[ 'in-reply-to' ] = msg.metadata[ 'reply-with' ]
                     await self.agent.schedule_message( str( msg.sender ), metadata=metadata )
 
+    """
+    Behaviour that listens to XMPP mesage that is sent from an agent when it is finished setting up.
+    Agent will communicate their status over XMPP. Deleberatelly stopped & finished agents share the same status.
+
+    Ontology: APiScheduling
+    Status: finished
+    """
     class StopAgents( CyclicBehaviour ):
         def all_stopped( self, agents ):
             if any( a[ 'status' ] != 'stopped' for a in agents ):

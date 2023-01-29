@@ -90,7 +90,7 @@ class APiTalkingAgent( Agent ):
             out = [ '%s:' % self.name ]
             out += [ i for i in msg ]
             self.LOG.info( out )'''
-            print( '%s:' % self.name, *msg )
+            # print( '%s:' % self.name, *msg )
 
     def verify( self, msg ):
         return verify( msg.metadata[ 'auth-token' ], str( msg.sender.bare() ) + self.token )
@@ -363,9 +363,11 @@ class APiBaseAgent( APiTalkingAgent ):
         self.BUFFER.extend( inp )
         print( 'BUFFER IS NOW', self.BUFFER )
 
-        if data == self.input_end:
-            self.service_quit( 'Got end delimiter on STDIN, quitting!' )
-        
+        # TODO: len(data) == 1 is workaround
+        if data == self.input_end or len(data) == 1:
+            quit = self.service_quit( 'Got end delimiter on STDIN, quitting!' )
+            asyncio.ensure_future(quit)
+
 
     
     async def input_stdin_run( self, cmd ):
@@ -1013,9 +1015,12 @@ class APiBaseAgent( APiTalkingAgent ):
         
         self.say( msg ) # firstly need to clean up and finish all threads
         self.input_ended = True
+
+        print('1')
         
         try:
             if self.stdinout_thread:
+                print("tu")
                 self.stdinout_thread.join()
             if self.stdinfile_thread:
                 self.stdinfile_thread.join()
@@ -1080,11 +1085,17 @@ class APiBaseAgent( APiTalkingAgent ):
         except Exception as e:
             pass
 
+        print('2')
+
         if self.http_proc:
             self.http_proc.terminate()
 
+        print('3')
+
         if self.ws_proc:
             self.ws_proc.terminate()
+
+        print('4')
 
         if self.nc_proc:
             # Total overkill ;-)
@@ -1095,6 +1106,8 @@ class APiBaseAgent( APiTalkingAgent ):
             pr.kill()
             self.nc_proc.terminate()
             os.system( 'kill -9 %d' % pid )
+
+        print('5')
         self.nc_output_thread_flag = False
         # TODO: Send message to holon that agent has finished
         metadata = deepcopy( self.inform_msg_template )
@@ -1102,6 +1115,9 @@ class APiBaseAgent( APiTalkingAgent ):
         metadata[ 'status' ] = 'finished'
         metadata[ 'error-message' ] = 'null'
 
+        print(6)
+
+        print(metadata)
         await self.schedule_message( self.holon, metadata=metadata )
         
         
