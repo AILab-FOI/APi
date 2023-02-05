@@ -68,6 +68,8 @@ class APiAgent( APiBaseAgent ):
         self.input_channel_servers = {}
         self.output_channel_servers = {}
 
+        self.protocol = 'tcp'
+
         self.query_msg_template = {}
         self.query_msg_template[ 'performative' ] = 'query-ref'
         self.query_msg_template[ 'ontology' ] = 'APiQuery'
@@ -75,13 +77,13 @@ class APiAgent( APiBaseAgent ):
 
         self.subscribe_msg_template = {}
         self.subscribe_msg_template[ 'performative' ] = 'subscribe'
-        self.subscribe_msg_template[ 'protocol' ] = self.agent_args[ 'protocol' ]
+        self.subscribe_msg_template[ 'protocol' ] = self.protocol
         self.subscribe_msg_template[ 'ontology' ] = 'APiDataTransfer'
         self.subscribe_msg_template[ 'auth-token' ] = self.auth
 
         self.attach_msg_template = {}
         self.attach_msg_template[ 'performative' ] = 'request'
-        self.attach_msg_template[ 'protocol' ] = self.agent_args[ 'protocol' ]
+        self.attach_msg_template[ 'protocol' ] = self.protocol
         self.attach_msg_template[ 'ontology' ] = 'APiDataTransfer'
         self.attach_msg_template[ 'auth-token' ] = self.auth
 
@@ -130,8 +132,6 @@ class APiAgent( APiBaseAgent ):
         self.shell_ip_stdout = None
         self.shell_port_stdout = None
         self.shell_buffer = []
-
-        self.all_channels_listening = False
 
     def _load( self, fh ):
         '''
@@ -228,10 +228,6 @@ class APiAgent( APiBaseAgent ):
             
     def read_args( self, args ):
         self.agent_args = {}
-        self.agent_args[ 'protocol' ] = 'tcp'
-        protocol = args.get('protocol', None)
-        if protocol:
-            self.agent_args[ 'protocol' ] = args[ 'protocol' ]
     
     """
     Method used to invoke sending out message to agents
@@ -499,12 +495,6 @@ class APiAgent( APiBaseAgent ):
 
         self.behaviour_sl = self.StatusListening()
         self.add_behaviour( self.behaviour_sl )
-
-        self.behaviour_acr = self.AllChannelsReady()
-        acr_template = Template(
-            metadata={ "ontology": "APiScheduling", "action":"channels_listening" }
-        )
-        self.add_behaviour( self.behaviour_acr, acr_template )
         
         self.behaviour_gca = self.GetChannelAdresses()
         self.add_behaviour( self.behaviour_gca )
@@ -564,8 +554,6 @@ class APiAgent( APiBaseAgent ):
     """
     class GetChannelAdresses( OneShotBehaviour ):
         async def run( self ):
-            while (not self.agent.all_channels_listening):
-                await asyncio.sleep( 1 )
             # waiting for address book containing input channels from holon
             self.agent.say( 'Inputs:', self.agent.input_channel_query_buffer )
             for inp in self.agent.input_channel_query_buffer:
@@ -594,17 +582,6 @@ class APiAgent( APiBaseAgent ):
                 metadata[ 'reply-with' ] = str( uuid4().hex )
                 metadata[ 'channel' ] = self.agent.environment[ 'name' ]
                 await self.agent.schedule_message( self.agent.holon, metadata=metadata )
-                
-    class AllChannelsReady( CyclicBehaviour ):
-        '''Be informed when all channels are ready'''
-        async def run( self ):
-            msg = await self.receive( timeout=0.1 )
-            if msg:
-                if self.agent.verify( msg ):
-                    self.agent.all_channels_listening = True
-                    self.agent.say( '(AllChannelsReady) Message verified, processing ...' )       
-                else:
-                    self.agent.say( 'Message could not be verified. IMPOSTER!!!!!!' )
     
     """
     Once address book is available, subscribe to 

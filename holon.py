@@ -127,29 +127,29 @@ class APiHolon( APiTalkingAgent ):
             if channel[ 'address' ] == address:
                 return name
 
+    def start_agent_thread( self, cmd ):
+        return sp.Popen( cmd, stderr=sp.STDOUT, start_new_session=True )
+
     def instantiate_all( self ):
-        # Create agent and channel instances
-        def start( cmd ):
-            return sp.Popen( cmd, stderr=sp.STDOUT, start_new_session=True )
-            
         if not self.environment == None:
             cmd = shlex.split( self.environment[ 'cmd' ] )
             self.say('Running environment:', self.environment.get('name'))
-            self.environment[ 'instance' ] = Thread( target=start, args=( cmd, ) )
+            self.environment[ 'instance' ] = Thread( target=self.start_agent_thread, args=( cmd, ) )
             self.environment[ 'instance' ].start()
             self.environment[ 'status' ] = 'started'
 
         for c in self.channels.values():
             cmd = shlex.split( c[ 'cmd' ] )
             self.say( 'Running channel:', c.get('name') )
-            c[ 'instance' ] = Thread( target=start, args=( cmd, ) )
+            c[ 'instance' ] = Thread( target=self.start_agent_thread, args=( cmd, ) )
             c[ 'instance' ].start()
             c[ 'status' ] = 'started'
                 
+    def instantiate_agents( self ):
         for a in self.agents.values():
             cmd = shlex.split( a[ 'cmd' ] )
             self.say( 'Running agent:', a.get('name') ) 
-            a[ 'instance' ] = Thread( target=start, args=( cmd, ) )
+            a[ 'instance' ] = Thread( target=self.start_agent_thread, args=( cmd, ) )
             a[ 'instance' ].start()
             a[ 'status' ] = 'started'
 
@@ -190,8 +190,8 @@ class APiHolon( APiTalkingAgent ):
         )
         self.add_behaviour( bgla, bgla_template )
 
-        bal = self.AllAgentsListening()
-        self.add_behaviour( bal )
+        bcl = self.AllChannelsListening()
+        self.add_behaviour( bcl )
 
         bep = self.ExecutePlan()
         self.add_behaviour( bep )
@@ -304,15 +304,12 @@ class APiHolon( APiTalkingAgent ):
                     metadata[ 'in-reply-to' ] = msg.metadata[ 'reply-with' ]
                     await self.agent.schedule_message( str( msg.sender ), metadata=metadata )
 
-    class AllAgentsListening( OneShotBehaviour ):
+    class AllChannelsListening( OneShotBehaviour ):
         async def run( self ):
-            while (not self.agent.all_agents_listening or not self.agent.all_channels_listening):
+            while (not self.agent.all_channels_listening):
                 await asyncio.sleep( 1 )
-            
-            metadata = deepcopy( self.agent.request_message_template )
-            metadata[ 'action' ] = 'channels_listening'
-            for agent in self.agent.agents.values():
-                await self.agent.schedule_message( agent[ 'address' ], metadata=metadata )
+
+            self.agent.instantiate_agents()
 
     class ExecutePlan( CyclicBehaviour ):
         async def run( self ):

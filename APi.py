@@ -72,19 +72,19 @@ if __name__ == '__main__':
     # TESTING
     os.chdir('test')
     
-    ns = generate_namespace()
-    agents = ns.get("agents", [])
-    channels = ns.get("channels", [])
-    holons = ns.get("holons", [])
-    environment = ns.get("environment", [])
-    execution_plan = None
+    # ns = generate_namespace()
+    # agents = ns.get("agents", [])
+    # channels = ns.get("channels", [])
+    # holons = ns.get("holons", [])
+    # environment = ns.get("environment", [])
+    # execution_plan = None
 
-    print(ns)
+    # print(ns)
 
     rs = APiRegistrationService( 'APi-test' )
     h1name, h1password = rs.register( 'holonko1' )
 
-    """
+    
     agents = [ 
         { 
             'name':'bla_stdin_stdout', 
@@ -131,7 +131,7 @@ if __name__ == '__main__':
             'output': "{ 'val2': ?y }" 
             } 
         ]
-    """
+    
     holons = []
     execution_plan = None
 
