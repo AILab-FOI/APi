@@ -53,8 +53,6 @@ class APi( APiListener ):
 
         environment = self.STACK[ -1 ]
         environment[ 'input' ] = input_payload
-        # TODO: there's a problem with multi lines for some reason
-        environment[ 'output' ] = input_payload
 
 
     # Enter a parse tree produced by APiParser#oflow.
@@ -74,11 +72,13 @@ class APi( APiListener ):
 
     # Enter a parse tree produced by APiParser#s_start.
     def enterS_start(self, ctx:APiParser.S_startContext):
-        pass
+        exp = ctx.children[ 1 ].getText()
+        self.STACK.append( exp )
 
     # Exit a parse tree produced by APiParser#s_start.
     def exitS_start(self, ctx:APiParser.S_startContext):
-        pass
+        exp = self.STACK[ -1 ]
+        self.ns.add_execution_plan( exp )
 
 
     # Enter a parse tree produced by APiParser#pi_expr.

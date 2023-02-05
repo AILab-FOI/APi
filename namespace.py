@@ -10,6 +10,7 @@ class APiNamespace( dict ):
         self[ 'channels' ] = []
         self[ 'environment' ] = {}
         self[ 'holons' ] = []
+        self[ 'execution_plans' ] = []
 
     def add_agent ( self, agent ):
         self[ 'agents' ].append( agent )    
@@ -21,4 +22,7 @@ class APiNamespace( dict ):
         self[ 'environment' ] = environment
 
     def add_holon( self, name ):
-        self[ 'holons' ].append( name )
+        self[ 'holons' ].append( name )    
+        
+    def add_execution_plan( self, plan ):
+        self[ 'execution_plans' ].append( plan )
