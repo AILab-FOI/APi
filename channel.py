@@ -44,6 +44,31 @@ class APiChannel( APiBaseAgent ):
         self.output = channel_output
         self.transformer = transformer
 
+        # we create one channel each, for tcp & udp communication since agent may request
+        # one protocol or another
+        tcp_srv, tcp_ip, tcp_port, tcp_protocol = self.get_server( 'tcp' )
+        self.tcp_sub_server = {
+            "server": tcp_srv,
+            "ip": tcp_ip,
+            "port": tcp_port,
+            "protocol": tcp_protocol
+        }        
+        udp_srv, udp_ip, udp_port, udp_protocol = self.get_server( 'udp' )
+        self.udp_sub_server = {
+            "server": udp_srv,
+            "ip": udp_ip,
+            "port": udp_port,
+            "protocol": udp_protocol
+        }
+
+        self.client_sockets = []
+
+        # iterating over netcat server clients is blocking, thus we run it in thread
+        # that wont block the runtime
+        self.tcp_cli_sock_t = Thread( target=self.get_server_clients, args=(tcp_srv,) )
+        self.tcp_cli_sock_t.start()
+        self.udp_cli_sock_t = Thread( target=self.get_server_clients, args=(udp_srv,) )
+        self.udp_cli_sock_t.start()
         
         # TODO: return map function based on channel_input/output
         # descriptor (can be JSON, XML, REGEX, TRANSFORMER, TRANSPARENT)
@@ -143,6 +168,23 @@ class APiChannel( APiBaseAgent ):
         # TODO: Implement XML
         raise NotImplementedError( NIE )
 
+    def get_server_clients( self, server ):
+        for client in server:
+            self.client_sockets.append( client )
+
+    def send_to_subscribed_agents( self, msg ):
+        closed_clients = []
+        for idx, client in enumerate( self.client_sockets ):
+            try:
+                client.sendline( msg )
+            except Exception as ex:
+                print("Run into error sending a msg over socket", ex)
+                closed_clients.append(idx)
+
+        # remove closed sockets -- might have to deal with concurrency
+        # for idx in closed_clients:
+            # del self.client_sockets[idx]
+
     def get_free_port( self ):
         '''Get a free port on the host'''
         sock = socket.socket( socket.AF_INET, socket.SOCK_STREAM )
@@ -177,7 +219,7 @@ class APiChannel( APiBaseAgent ):
         
         return nclib.TCPServer( ( '0.0.0.0', port ) )
 
-    def get_server( self, srv_type, protocol ):
+    def get_server( self, protocol ):
         '''Get a NetCat server for sending or receiving'''
         port =  self.get_free_port()
         host = self.get_ip()
@@ -193,17 +235,26 @@ class APiChannel( APiBaseAgent ):
             except OSError as e:
                 port = self.get_free_port()
 
-                
-        if srv_type == 'attach':
-            self.attach_servers.append( srv )
-            print( 'ATTACH SERVERS:', self.attach_servers )
-        elif srv_type == 'subscribe':
-            self.subscribe_servers.append( srv )
-            print( 'SUBSCRIBE SERVERS:', self.subscribe_servers )
-        else:
-            raise APiChannelDefinitionError( 'Unknown server type:', srv_type )
+        return srv, host, str( port ), protocol
+
+
+    def get_subscribe_server( self, protocol ):
+        instance = self.tcp_sub_server if protocol == "tcp" else self.udp_sub_server
+
+        srv = instance['server']
+        ip = instance['ip']
+        port = instance['port']
+        protocol = instance['protocol']
         
-        return host, str( port ), protocol
+        return srv, ip, port, protocol
+
+    def get_attach_server( self, protocol ):
+        srv, host, port, protocol = self.get_server( protocol )
+
+        self.attach_servers.append( srv )
+
+        return srv, host, port, protocol
+
 
     class StatusListening( OneShotBehaviour ):
         async def run( self ):
@@ -226,20 +277,20 @@ class APiChannel( APiBaseAgent ):
                     req_protocol = msg.metadata[ 'protocol' ]
                     if msg.metadata[ 'performative' ] == 'subscribe':
                         metadata[ 'type' ] = 'input'
-                        server, port, protocol = self.agent.get_server( 'subscribe', req_protocol )
-                        print( 'ADDED subscribe server', server, port )
+                        _, ip, port, protocol = self.agent.get_subscribe_server( req_protocol )
+                        print( 'ADDED subscribe server', ip, port )
                     elif msg.metadata[ 'performative' ] == 'request':
                         metadata[ 'type' ] = 'output'
-                        server, port, protocol = self.agent.get_server( 'attach', req_protocol )
-                        print( 'ADDED attach server', server, port )
+                        _, ip, port, protocol = self.agent.get_attach_server( req_protocol )
+                        print( 'ADDED attach server', ip, port )
                     else:
                         self.agent.say( 'Unknown message' )
                         metadata = self.agent.refuse_message_template
                         metadata[ 'in-reply-to' ] = msg.metadata[ 'reply-with' ]
                         metadata[ 'reason' ] = 'unknown-message'
                         await self.agent.schedule_message( str( msg.sender ), metadata=metadata )
-                    
-                    metadata[ 'server' ] = server
+
+                    metadata[ 'server' ] = ip
                     metadata[ 'port' ] = port
                     metadata[ 'protocol' ] = protocol
                     await self.agent.schedule_message( str( msg.sender ), metadata=metadata )
@@ -281,14 +332,17 @@ class APiChannel( APiBaseAgent ):
                             msg = self.agent.map( result.decode() )
                             self.agent.say( 'MSG', msg, srv.addr )
                             self.agent.say( 'SERVER LIST 1', self.agent.subscribe_servers )
-                            if self.agent.subscribe_servers:
-                                self.agent.say( 'SERVER LIST 2', self.agent.subscribe_servers )
-                                for srv_out in self.agent.subscribe_servers:
-                                    self.agent.say( 'OUT SERVER', srv_out, srv_out.addr )
-                                    for client_out in srv_out:
-                                        self.agent.say( 'SENDING MSG TO', client_out, client_out.peer )
-                                        client_out.sendline( msg.encode() )
-                                        self.agent.say( 'DONE SENDING MSG' )
+
+                            self.agent.send_to_subscribed_agents( msg.encode() )
+
+                            # if self.agent.subscribe_servers:
+                            #     self.agent.say( 'SERVER LIST 2', self.agent.subscribe_servers )
+                            #     for srv_out in self.agent.subscribe_servers:
+                            #         self.agent.say( 'OUT SERVER', srv_out, srv_out.addr )
+                            #         for client_out in srv_out:
+                            #             self.agent.say( 'SENDING MSG TO', client_out, client_out.peer )
+                            #             client_out.sendline( msg.encode() )
+                            #             self.agent.say( 'DONE SENDING MSG' )
                     
     async def setup(self):
         super().setup()

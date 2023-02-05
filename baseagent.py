@@ -364,7 +364,8 @@ class APiBaseAgent( APiTalkingAgent ):
         print( 'BUFFER IS NOW', self.BUFFER )
 
         # TODO: len(data) == 1 is workaround
-        if data == self.input_end or len(data) == 1:
+        # if data == self.input_end or len(data) == 1:
+        if data == self.input_end:
             quit = self.service_quit( 'Got end delimiter on STDIN, quitting!' )
             asyncio.ensure_future(quit)
 
@@ -1015,12 +1016,9 @@ class APiBaseAgent( APiTalkingAgent ):
         
         self.say( msg ) # firstly need to clean up and finish all threads
         self.input_ended = True
-
-        print('1')
         
         try:
             if self.stdinout_thread:
-                print("tu")
                 self.stdinout_thread.join()
             if self.stdinfile_thread:
                 self.stdinfile_thread.join()
@@ -1085,17 +1083,11 @@ class APiBaseAgent( APiTalkingAgent ):
         except Exception as e:
             pass
 
-        print('2')
-
         if self.http_proc:
             self.http_proc.terminate()
 
-        print('3')
-
         if self.ws_proc:
             self.ws_proc.terminate()
-
-        print('4')
 
         if self.nc_proc:
             # Total overkill ;-)
@@ -1107,7 +1099,6 @@ class APiBaseAgent( APiTalkingAgent ):
             self.nc_proc.terminate()
             os.system( 'kill -9 %d' % pid )
 
-        print('5')
         self.nc_output_thread_flag = False
         # TODO: Send message to holon that agent has finished
         metadata = deepcopy( self.inform_msg_template )
@@ -1115,9 +1106,6 @@ class APiBaseAgent( APiTalkingAgent ):
         metadata[ 'status' ] = 'finished'
         metadata[ 'error-message' ] = 'null'
 
-        print(6)
-
-        print(metadata)
         await self.schedule_message( self.holon, metadata=metadata )
         
         

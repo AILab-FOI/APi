@@ -343,7 +343,6 @@ class APiHolon( APiTalkingAgent ):
             msg = await self.receive( timeout=0.1 )
             if msg:
                 if self.agent.verify( msg ):
-                    print("doneeee")
                     self.agent.say( '(FinishedAgents) Message verified, processing ...' )
                     agent = self.agent.agent_name_from_address( msg.sender.bare() )
 
