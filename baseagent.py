@@ -1107,9 +1107,7 @@ class APiBaseAgent( APiTalkingAgent ):
         metadata[ 'error-message' ] = 'null'
 
         await self.schedule_message( self.holon, metadata=metadata )
-        
-        
-        
+
     def process_descriptor( self ):
         '''
         Agent descriptor processor (the heart of the agent). Processes

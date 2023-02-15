@@ -4,10 +4,12 @@ from baseagent import *
 from registrar import *
 from namespace import *
 
+from execution_plan import resolve_execution_plan
+
 class APiHolon( APiTalkingAgent ):
     '''A holon created by an .api file.'''
     '''TODO: Finish holon implementation'''
-    def __init__( self, holonname, name, password, agents, channels, environment, holons, execution_plan ):
+    def __init__( self, holonname, name, password, agents, channels, environment, holons, execution_plans ):
         self.token = str( uuid4().hex )
         super().__init__( name, password, str( uuid4().hex ) )
         self.holonname = holonname
@@ -23,22 +25,23 @@ class APiHolon( APiTalkingAgent ):
         for c in channels:
             self.setup_channel( c )
 
+        self.agent_types = {}
         self.agents = {}
         for a in agents:
-            self.setup_agent( a )
+            self.create_agent_types_map( a )
 
         self.holons = {}
         for h in holons:
             self.setup_holon( h )
 
-        self.execution_plan = None
-        self.setup_execution( execution_plan )
+        self.execution_plans = None
+        self.setup_execution( execution_plans )
 
         self.all_channels_listening = False
         self.all_agents_listening = False
 
         self.all_started = False # Indicate if execution plan has been started already
-        self.instantiate_all()
+        self.start_env_and_channels_all()
 
         self.query_message_template = {}
         self.query_message_template[ 'performative' ] = 'inform-ref'
@@ -63,9 +66,10 @@ class APiHolon( APiTalkingAgent ):
         self.confirm_message_template[ 'ontology' ] = 'APiScheduling'
         self.confirm_message_template[ 'auth-token' ] = self.auth
 
+    def create_agent_types_map( self, agent ):
+        self.agent_types[ agent[ 'name' ] ] = agent
         
-
-    def setup_agent( self, agent ):
+    def setup_agent( self, agent_type, id = None, plan_id = None ):
         '''TODO: This method should create and start an agent 
                  depending on type (local Unix, Docker, other 
                  container ...). If it is a container type
@@ -73,13 +77,18 @@ class APiHolon( APiTalkingAgent ):
                  directly on some orchestration platform (i.e.
                  Kubernetes, Docker Swarm or similar). This should
                  be specified in the agent definition file (.ag).'''
+
+        if not id:
+            id = uuid4().hex
+        agent = deepcopy( self.agent_types[ agent_type ] )
         self.say( 'Registering agent', agent[ 'name' ] )
         address, password = self.registrar.register( agent[ 'name' ] )
         agent[ 'cmd' ] = 'python3 ../agent.py "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s"' % ( agent[ 'name' ], address, password, self.address, self.holonname, self.token, json.dumps( agent[ 'args' ] ).replace('"','\\"'), json.dumps( agent[ 'flows' ] ).replace('"','\\"') )
         agent[ 'address' ] = address
-        # TODO: properly handle status change
         agent[ 'status' ] = 'setup'
-        self.agents[ agent[ 'name' ] ] = agent
+        agent[ 'id' ] = id
+        agent[ 'plan_id' ] = plan_id
+        self.agents[ id ] = agent
 
     def setup_channel( self, channel ):
         ''' TODO: Same as above, it should be possible to 
@@ -109,9 +118,9 @@ class APiHolon( APiTalkingAgent ):
         environment[ 'status' ] = 'setup'
         self.environment = environment
 
-    def setup_execution( self, execution_plan ):
-        # TODO: Design and implement execution plans
-        pass
+    def setup_execution( self, execution_plans ):
+        resolved_execution_plans = [resolve_execution_plan(plan) for plan in execution_plans]
+        self.execution_plans = resolved_execution_plans
 
     def agent_name_from_address( self, address ):
         # Ugly hack
@@ -127,31 +136,74 @@ class APiHolon( APiTalkingAgent ):
             if channel[ 'address' ] == address:
                 return name
 
-    def start_agent_thread( self, cmd ):
+    def start_basic_agent_thread( self, cmd ):
         return sp.Popen( cmd, stderr=sp.STDOUT, start_new_session=True )
 
-    def instantiate_all( self ):
+    def agent_finished( self, a_id, plan_id, status ):
+        print("finished", a_id, plan_id, status)
+        print("finished", a_id, plan_id, status)
+        print("finished", a_id, plan_id, status)
+        print("finished", a_id, plan_id, status)
+        pass
+
+    def start_dependant_agent_thread( self, a_id, plan_id, cmd ):
+        proc = sp.Popen( cmd, start_new_session=True )
+        proc.communicate()
+        return_code = proc.returncode
+
+        self.agent_finished(a_id, plan_id, return_code)
+
+    def start_env_and_channels_all( self ):
         if not self.environment == None:
             cmd = shlex.split( self.environment[ 'cmd' ] )
             self.say('Running environment:', self.environment.get('name'))
-            self.environment[ 'instance' ] = Thread( target=self.start_agent_thread, args=( cmd, ) )
+            self.environment[ 'instance' ] = Thread( target=self.start_basic_agent_thread, args=( cmd, ) )
             self.environment[ 'instance' ].start()
             self.environment[ 'status' ] = 'started'
 
         for c in self.channels.values():
             cmd = shlex.split( c[ 'cmd' ] )
             self.say( 'Running channel:', c.get('name') )
-            c[ 'instance' ] = Thread( target=self.start_agent_thread, args=( cmd, ) )
+            c[ 'instance' ] = Thread( target=self.start_basic_agent_thread, args=( cmd, ) )
             c[ 'instance' ].start()
             c[ 'status' ] = 'started'
                 
-    def instantiate_agents( self ):
-        for a in self.agents.values():
+    def setup_agents( self ):
+        if not self.execution_plans == None:
+            for execution_plan in self.execution_plans:
+                plan = execution_plan[ 'plan' ]
+                plan_id = execution_plan['id']
+                agent_ids = [a_id for a_id in plan.keys()]
+                for a_id in agent_ids:
+                    a_ref = plan[ a_id ]
+                    a_type = a_ref[ 'name' ]
+                    self.setup_agent( a_type, a_id, plan_id )
+        else:            
+            for a_type in self.agent_types.keys():                
+                self.setup_agent( a_type )
+
+    def start_initial_agents( self ):
+        def run( a, start_type ):
             cmd = shlex.split( a[ 'cmd' ] )
-            self.say( 'Running agent:', a.get('name') ) 
-            a[ 'instance' ] = Thread( target=self.start_agent_thread, args=( cmd, ) )
+            a_id = a[ 'id' ]
+            plan_id = a[ 'plan_id' ]
+            self.say( 'Running agent:', a.get('name') )
+            if start_type == "dependant":
+                a[ 'instance' ] = Thread( target=self.start_dependant_agent_thread, args=( a_id, plan_id, cmd ) )
+            else:
+                a[ 'instance' ] = Thread( target=self.start_basic_agent_thread, args=( cmd, ) )
             a[ 'instance' ].start()
             a[ 'status' ] = 'started'
+
+        if not self.execution_plans == None:
+            for execution_plan in self.execution_plans:
+                i_agent_ids = execution_plan[ 'initial_agents_to_run' ]
+                for a in self.agents.values():
+                    if a[ 'id' ] in i_agent_ids:
+                        run( a, 'dependant' )
+        else:
+            for a in self.agents.values():
+                run( a, 'basic' )
 
     async def stop( self ):
         self.say( '(Stop Agents) Stopping all agents & channels!' )
@@ -259,7 +311,6 @@ class APiHolon( APiTalkingAgent ):
                     agent = self.agent.agent_name_from_address( msg.sender.bare() )
                     self.agent.say( '(QueryNameGetReadyAgents) Setting agent', agent, 'status to ready.' )
                     self.agent.agents[ agent ][ 'status' ] = 'ready'
-                        
                 else:
                     self.agent.say( 'Message could not be verified. IMPOSTER!!!!!!' )
                     metadata = deepcopy( self.agent.refuse_message_template )
@@ -309,13 +360,36 @@ class APiHolon( APiTalkingAgent ):
             while (not self.agent.all_channels_listening):
                 await asyncio.sleep( 1 )
 
-            self.agent.instantiate_agents()
+            self.agent.setup_agents()
+            self.agent.start_initial_agents()
 
     class ExecutePlan( CyclicBehaviour ):
         async def run( self ):
-            if self.agent.execution_plan:
-                # TODO: Design and implement execution plans
-                pass
+            # wait until we have some agents running
+            if len(self.agent.agents.values()) == 0:
+                return
+
+            if not self.agent.execution_plans is None:
+                for plan in self.agent.execution_plans:
+                    if plan[ 'started' ]:
+                        continue
+
+                    i_agent_ids = plan[ 'initial_agents_to_run' ]
+
+                    all_ready = True
+                    for agent in self.agent.agents.values():
+                        if agent[ 'id' ] in i_agent_ids and agent[ 'status' ] != 'ready':
+                            all_ready = False
+                            
+                    if all_ready:
+                        self.agent.say( '(Execute plan) All agents ready, scheduling them for start!' )
+                        metadata = deepcopy( self.agent.request_message_template )
+                        metadata[ 'action' ] = 'start'
+                        for agent in self.agent.agents.values():
+                            if agent[ 'id' ] in i_agent_ids:
+                                await self.agent.schedule_message( agent[ 'address' ], metadata=metadata )
+                        plan[ 'started' ] = True
+                
             else:
                 # Tell all agents to start if they are ready
                 all_ready = True

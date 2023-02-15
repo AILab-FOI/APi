@@ -133,7 +133,7 @@ if __name__ == '__main__':
         ]
     
     holons = []
-    execution_plan = None
+    execution_plan = ['bla_file_stdout bla_stdin_stdout']
 
     h1 = APiHolon( 'holonko1', h1name, h1password, agents, channels, environment, holons, execution_plan )
     h1.start()
