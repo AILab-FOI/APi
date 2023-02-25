@@ -151,7 +151,7 @@ class APi( APiListener ):
     # Enter a parse tree produced by APiParser#s_channel_forward.
     def enterS_channel_forward(self, ctx:APiParser.S_channel_forwardContext):
         channel_name = ctx.children[ 2 ].getText()
-        channel = { 'name': channel_name, 'input': None, 'output': None, 'protocol': 'udp' }
+        channel = { 'name': channel_name, 'input': None, 'output': None, 'protocol': 'tcp' } # TODO: default to TCP
         self.ns.add_channel(channel)
 
     # Exit a parse tree produced by APiParser#s_channel_forward.
