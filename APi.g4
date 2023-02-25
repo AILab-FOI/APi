@@ -32,9 +32,9 @@ pi_expr : '(' pi_expr ')'
 	| pi_expr WS ONSUCCESS WS pi_expr
 	| pi_expr WS ONFAIL WS pi_expr
 	| pi_expr WS pi_expr
-	| IDENT ;
+	| IDENT ( arglist )?;
 
-s_agent : AGENT WS IDENT WS ( arglist WS )? ':' NEWLINE aflow+ ;
+s_agent : AGENT WS IDENT ( arglist WS )? ':' NEWLINE aflow+ ;
 
 arglist : '(' IDENT (WS IDENT)* ')';
 

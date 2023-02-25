@@ -8,7 +8,7 @@ class APiNamespace( dict ):
     def __init__( self, *args, **kwargs ):
         self[ 'agents' ] = []
         self[ 'channels' ] = []
-        self[ 'environment' ] = {}
+        self[ 'environment' ] = None
         self[ 'execution_plans' ] = []
 
     def add_agent ( self, agent ):

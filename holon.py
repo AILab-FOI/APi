@@ -78,7 +78,7 @@ class APiHolon( APiTalkingAgent ):
             param_by_arg[arg_name] = param_value
 
         adjusted_flows = []
-        for source, destination in flows.items():
+        for source, destination in flows:
             adjusted_flow = (param_by_arg.get(source, source), param_by_arg.get(destination, destination))
             adjusted_flows.append(adjusted_flow)
 
@@ -285,7 +285,7 @@ class APiHolon( APiTalkingAgent ):
                     metadata[ 'agent' ] = channel
 
                     try:
-                        if channel == self.agent.environment[ 'holon_name' ]:
+                        if self.agent.environment and channel == self.agent.environment[ 'holon_name' ]:
                             address = self.agent.environment[ 'address' ]
                         else:                            
                             address = self.agent.channels[ channel ][ 'address' ]
