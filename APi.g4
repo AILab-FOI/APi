@@ -16,37 +16,37 @@ import JSON, XMLParser ;
 options { tokenVocab=XMLLexer; }
 
 
-api_program : ( s_import | s_environment | s_channel | s_channel_transformer | s_agent | s_start | COMMENT | NEWLINE )*? ;
+api_program : ( s_import | s_environment | s_channel | s_channel_forward | s_agent | s_start | COMMENT | NEWLINE )*? ;
 
-s_environment : ENVIRONMENT ':' NEWLINE ( iflow | oflow )+ ;
+s_environment : ENVIRONMENT WS ':' NEWLINE ( iflow | oflow )+ ;
 
-iflow : TAB IDENT INPUT_FORMAT s_input NEWLINE ;
+iflow : TAB INPUT WS INPUT_FORMAT WS s_input NEWLINE ;
 
-oflow : TAB IDENT OUTPUT_FORMAT s_output NEWLINE ;
+oflow : TAB OUTPUT WS OUTPUT_FORMAT WS s_output NEWLINE ;
 
-s_start : START pi_expr ;
+s_start : START WS pi_expr ;
 
 pi_expr : '(' pi_expr ')'
 	| pi_expr RESTART
-	| pi_expr PARALLEL pi_expr
-	| pi_expr ONSUCCESS pi_expr
-	| pi_expr ONFAIL pi_expr
-	| pi_expr pi_expr
+	| pi_expr WS PARALLEL WS pi_expr
+	| pi_expr WS ONSUCCESS WS pi_expr
+	| pi_expr WS ONFAIL WS pi_expr
+	| pi_expr WS pi_expr
 	| IDENT ;
 
-s_agent : AGENT IDENT ( arglist )? ':' NEWLINE flow+ ;
+s_agent : AGENT WS IDENT WS ( arglist WS )? ':' NEWLINE aflow+ ;
 
-arglist : '(' IDENT IDENT* ')';
+arglist : '(' IDENT (WS IDENT)* ')';
 
-flow : TAB valid_channel SENDS valid_channel ( SENDS valid_channel )* NEWLINE ;
+aflow : TAB valid_channel WS A_SENDS WS valid_channel NEWLINE ;
 
-valid_channel : IDENT | SELF | NIL | STDIN | STDOUT | STDERR | VOID ;
+valid_channel : IDENT | SELF | NIL ;
 
-s_channel : CHANNEL IDENT ':' NEWLINE s_channel_spec ;
+s_channel : CHANNEL WS IDENT WS ':' NEWLINE s_channel_spec ;
 
-s_channel_transformer : CHANNEL IDENT '.' NEWLINE ;
+s_channel_forward : CHANNEL WS IDENT WS '.' NEWLINE ;
 
-s_channel_spec : TAB s_input SENDS s_output NEWLINE;
+s_channel_spec : TAB s_input WS C_SENDS WS s_output NEWLINE;
 
 /* TODO: Implement remote holon import (e.g. from another server like
    	 holon1@bla.foi.hr). The import statement needs to be changed
@@ -82,19 +82,15 @@ s_input : s_json | s_xml | s_regex ;
 
 s_output : s_json | s_xml ;
 
-s_xml : XML xml ;
+s_xml : XML '(' xml ')';
 
-s_json : JSON json ;
+s_json : JSON '(' json ')';
 
-s_regex : REGEX STRING ;
+s_regex : REGEX '(' STRING ')';
 
-STDIN : 'stdin' ;
+INPUT : 'input' ;
 
-STDOUT : 'stdout' ;
-
-STDERR : 'stderr' ;
-
-VOID : 'void' ;
+OUTPUT : 'output' ;
 
 IMPORT : 'import' ;
 
@@ -126,7 +122,13 @@ INPUT_FORMAT : '=>' ;
 
 OUTPUT_FORMAT : '<=' ;
 
-SENDS  : '->' ;
+A_SENDS  : '->' ;
+
+C_SENDS : TCP | UDP ;
+
+TCP : '-->' ;
+
+UDP : '*->' ;
 
 NIL     : '0' ;
 
@@ -136,9 +138,8 @@ COMMENT1: '//'~[\n]* ;
 
 COMMENT2: '/*' .*? '*/' ;
 
-//SPACE   : [ \r]+ -> skip ;
+WS : [ \f\r] ;
 
 NEWLINE : [\n] ;
 
 TAB : [\t] ;
-

@@ -9,9 +9,6 @@ Click == 7.0
 # awkward π-nguin/test/stdout_server.py: 3
 Flask == 1.1.1
 
-# awkward π-nguin/baseagent.py: 27
-PyXF == 1.0.6
-
 # awkward π-nguin/baseagent.py: 32
 # awkward π-nguin/registrar.py: 16
 PyYAML == 3.13

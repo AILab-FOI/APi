@@ -6,7 +6,7 @@ import argparse
 class APiAgent( APiBaseAgent ):
     '''Service wrapper agent.'''
 
-    def __init__( self, agentname, name, password, holon, holon_name, token, args={}, flows=[] ):
+    def __init__( self, agentname, name, password, holon, holon_name, token, flows=[] ):
         '''
         Constructor.
         agentname - name as in agent definition (.ad) file.
@@ -14,7 +14,6 @@ class APiAgent( APiBaseAgent ):
         password - XMPP/Jabber password
         holon - parent holon
         token - token from holon
-        args - list of arguments (from APi statement)
         flows - list of message flows (from APi statement)
         '''        
         try:
@@ -28,7 +27,6 @@ class APiAgent( APiBaseAgent ):
         self.holon_name = holon_name
         self.holon = holon
         self._load( fh )
-        self.read_args( args )
 
         self.flows = []
         for f in flows:
@@ -68,8 +66,6 @@ class APiAgent( APiBaseAgent ):
         self.input_channel_servers = {}
         self.output_channel_servers = {}
 
-        self.protocol = 'tcp'
-
         self.query_msg_template = {}
         self.query_msg_template[ 'performative' ] = 'query-ref'
         self.query_msg_template[ 'ontology' ] = 'APiQuery'
@@ -77,13 +73,11 @@ class APiAgent( APiBaseAgent ):
 
         self.subscribe_msg_template = {}
         self.subscribe_msg_template[ 'performative' ] = 'subscribe'
-        self.subscribe_msg_template[ 'protocol' ] = self.protocol
         self.subscribe_msg_template[ 'ontology' ] = 'APiDataTransfer'
         self.subscribe_msg_template[ 'auth-token' ] = self.auth
 
         self.attach_msg_template = {}
         self.attach_msg_template[ 'performative' ] = 'request'
-        self.attach_msg_template[ 'protocol' ] = self.protocol
         self.attach_msg_template[ 'ontology' ] = 'APiDataTransfer'
         self.attach_msg_template[ 'auth-token' ] = self.auth
 
@@ -225,9 +219,6 @@ class APiAgent( APiBaseAgent ):
         else:
             err = 'Invalid agent type: %s' % self.type
             raise APiAgentDefinitionError( err )
-            
-    def read_args( self, args ):
-        self.agent_args = {}
     
     """
     Method used to invoke sending out message to agents
@@ -696,6 +687,8 @@ class APiAgent( APiBaseAgent ):
                             servers[ channel ][ 'port' ] = int( msg.metadata[ 'port' ] )
                             servers[ channel ][ 'protocol' ] = msg.metadata[ 'protocol' ]
                             servers[ channel ][ 'socket' ] = nclib.Netcat( ( msg.metadata[ 'server' ], int( msg.metadata[ 'port' ] ) ), udp=is_udp )
+                            if is_udp:
+                                servers[ channel ][ 'socket' ].send("connected")
 
                             if len( self.agent.output_channel_servers ) == len( self.agent.output_channels ) and len( self.agent.input_channel_servers ) == len( self.agent.input_channels ):
                                 # letting holon know once agent is all set up
@@ -753,8 +746,13 @@ class APiAgent( APiBaseAgent ):
             # TODO: Deal with forward channels
             if self.agent.all_setup():
                 for srv in self.agent.input_channel_servers.values():
-                    result = srv[ 'socket' ].recv_until( self.agent.delimiter, timeout=0.2 )
-                    sleep( 0.5 ) # TODO: Investigate if this line is needed
+                    is_udp = True if srv['protocol'] == 'udp' else False
+
+                    if is_udp:
+                        result = srv['socket'].recv_until(self.agent.delimiter, timeout=0.1)
+                    else:
+                        result = srv[ 'socket' ].recv_until( self.agent.delimiter, timeout=0.2 )
+                    # sleep( 0.5 ) # TODO: Investigate if this line is needed
                     if result:
                         self.agent.say( '(Listen) Received', result, 'from server', srv[ 'server' ], srv[ 'port' ] )
                         self.agent.input( result.decode() )
@@ -780,11 +778,10 @@ class APiAgent( APiBaseAgent ):
                     self.agent.say( 'Message could not be verified. IMPOSTER!!!!!!' )
 
 
-def main( name, address, password, holon, holon_name, token, args, flows ):
-    args = json.loads( args )
+def main( name, address, password, holon, holon_name, token, flows ):
     flows = json.loads( flows )
     flows = [ ( i[ 0 ], i[ 1 ] ) if len(i) == 2 else ( i[ 0 ], i[ 1 ], i[ 2 ] ) for i in flows ]
-    a = APiAgent( name, address, password, holon, holon_name, token, args, flows )
+    a = APiAgent( name, address, password, holon, holon_name, token, flows )
     
     a.start()
 
@@ -796,9 +793,8 @@ if __name__ == '__main__':
     parser.add_argument( 'holon', metavar='HOLON', type=str, help="Agent's instantiating holon's XMPP/JID address" )
     parser.add_argument( 'holon_name', metavar='HOLON_NAME', type=str, help="Agent's instantiating holon's name" )
     parser.add_argument( 'token', metavar='TOKEN', type=str, help="Agent's security token" )
-    parser.add_argument( 'args', metavar='ARGS', type=str, help="Agent's instantiation arguments" )
     parser.add_argument( 'flows', metavar='FLOWS', type=str, help="Agent's communication flows" )
 
     args = parser.parse_args()
 
-    main( args.name, args.address, args.password, args.holon, args.holon_name, args.token, args.args, args.flows )
+    main( args.name, args.address, args.password, args.holon, args.holon_name, args.token, args.flows )

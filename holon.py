@@ -69,21 +69,33 @@ class APiHolon( APiTalkingAgent ):
     def create_agent_types_map( self, agent ):
         self.agent_types[ agent[ 'name' ] ] = agent
         
-    def setup_agent( self, agent_type, id = None, plan_id = None ):
-        '''TODO: This method should create and start an agent 
-                 depending on type (local Unix, Docker, other 
-                 container ...). If it is a container type
-                 there should be a possibility to schedule it
-                 directly on some orchestration platform (i.e.
-                 Kubernetes, Docker Swarm or similar). This should
-                 be specified in the agent definition file (.ag).'''
+    def adjust_flows_by_args( self, agent_args, agent_params, flows ):
+        param_by_arg = {}
+        for i in range(0, len(agent_args)):
+            arg_name = agent_args[i]
+            param_value = agent_params[i]
 
+            param_by_arg[arg_name] = param_value
+
+        adjusted_flows = []
+        for source, destination in flows.items():
+            adjusted_flow = (param_by_arg.get(source, source), param_by_arg.get(destination, destination))
+            adjusted_flows.append(adjusted_flow)
+
+        return adjusted_flows
+
+
+    def setup_agent( self, agent_type, id = None, plan_id = None, params = None ):
         if not id:
             id = uuid4().hex
         agent = deepcopy( self.agent_types[ agent_type ] )
         self.say( 'Registering agent', agent[ 'name' ] )
         address, password = self.registrar.register( agent[ 'name' ] )
-        agent[ 'cmd' ] = 'python3 ../agent.py "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s"' % ( agent[ 'name' ], address, password, self.address, self.holonname, self.token, json.dumps( agent[ 'args' ] ).replace('"','\\"'), json.dumps( agent[ 'flows' ] ).replace('"','\\"') )
+        if params:
+            flows = self.adjust_flows_by_args(agent[ 'args' ], params, agent[ 'flows' ])
+        else:
+            flows = agent[ 'flows' ]
+        agent[ 'cmd' ] = 'python3 ../agent.py "%s" "%s" "%s" "%s" "%s" "%s" "%s"' % ( agent[ 'name' ], address, password, self.address, self.holonname, self.token, json.dumps( flows ).replace('"','\\"') )
         agent[ 'address' ] = address
         agent[ 'status' ] = 'setup'
         agent[ 'id' ] = id
@@ -91,12 +103,9 @@ class APiHolon( APiTalkingAgent ):
         self.agents[ id ] = agent
 
     def setup_channel( self, channel ):
-        ''' TODO: Same as above, it should be possible to 
-                  create channels in an orchestration platform
-                  if specified in the channel definition file.'''
         address, password = self.registrar.register( channel[ 'name' ] )
         self.say( 'Registering channel', channel[ 'name' ] )
-        channel[ 'cmd' ] = 'python3 ../channel.py "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s"' % ( channel[ 'name' ], address, password, self.address, self.token, json.dumps( ( self.registrar.min_port, self.registrar.max_port ) ), json.dumps( channel[ 'input' ] ).replace('"','\\"'), json.dumps( channel[ 'output' ] ).replace('"','\\"'), json.dumps( channel[ 'transformer' ] ).replace('"','\\"') )
+        channel[ 'cmd' ] = 'python3 ../channel.py "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s"' % ( channel[ 'name' ], address, password, self.address, self.token, json.dumps( ( self.registrar.min_port, self.registrar.max_port ) ), channel[ 'protocol' ], json.dumps( channel[ 'input' ] ).replace('"','\\"'), json.dumps( channel[ 'output' ] ).replace('"','\\"') )
         channel[ 'address' ] = address
         channel[ 'status' ] = 'setup'
         self.channels[ channel[ 'name' ] ] = channel
@@ -105,20 +114,20 @@ class APiHolon( APiTalkingAgent ):
         # TODO: implement starting included holons
         pass
 
-    def setup_environment( self, env_spec ):
-        # TODO: implement setting up environment
-        #       channels (input + output)
-        self.say( 'Registering environment' )
+    def setup_environment( self, env ):
         environment = {}
         environment[ 'holon_name' ] = self.holonname
         environment[ 'name' ] = f'{self.holonname}-environment'
         address, password = self.registrar.register( environment[ 'name' ] )
-        environment[ 'cmd' ] = 'python3 ../environment.py "%s" "%s" "%s" "%s" "%s" "%s"' % ( environment[ 'name' ], address, password, self.address, self.token, json.dumps( env_spec ).replace('"','\\"') )
+        environment[ 'cmd' ] = 'python3 ../environment.py "%s" "%s" "%s" "%s" "%s" "%s" "%s"' % ( environment[ 'name' ], address, password, self.address, self.token, json.dumps( env[ 'input' ] ).replace('"','\\"'), json.dumps( env[ 'output' ] ).replace('"','\\"')  )
         environment[ 'address' ] = address
         environment[ 'status' ] = 'setup'
         self.environment = environment
 
     def setup_execution( self, execution_plans ):
+        if execution_plans is None:
+            return
+
         resolved_execution_plans = [resolve_execution_plan(plan) for plan in execution_plans]
         self.execution_plans = resolved_execution_plans
 
@@ -177,7 +186,8 @@ class APiHolon( APiTalkingAgent ):
                 for a_id in agent_ids:
                     a_ref = plan[ a_id ]
                     a_type = a_ref[ 'name' ]
-                    self.setup_agent( a_type, a_id, plan_id )
+                    a_args = a_ref.get('args', None)
+                    self.setup_agent( a_type, a_id, plan_id, a_args )
         else:            
             for a_type in self.agent_types.keys():                
                 self.setup_agent( a_type )

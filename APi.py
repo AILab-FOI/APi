@@ -72,73 +72,24 @@ if __name__ == '__main__':
     # TESTING
     os.chdir('test')
     
-    # ns = generate_namespace()
-    # agents = ns.get("agents", [])
-    # channels = ns.get("channels", [])
-    # holons = ns.get("holons", [])
-    # environment = ns.get("environment", [])
-    # execution_plan = None
+    ns = generate_namespace()
+    agents = ns.get("agents", [])
+    channels = ns.get("channels", [])
+    holons = ns.get("holons", [])
+    environment = ns.get("environment", [])
+    execution_plans = ns.get("execution_plans")
 
-    # print(ns)
+    print(ns)
 
-    rs = APiRegistrationService( 'APi-test' )
-    h1name, h1password = rs.register( 'holonko1' )
+    con = True
+    if con:
+        rs = APiRegistrationService( 'APi-test' )
+        h1name, h1password = rs.register( 'holonko1' )
 
-    
-    agents = [ 
-        { 
-            'name':'bla_stdin_stdout', 
-            # 'flows':[ ( 'c', 'self' ), ( 'self', 'd' ), ( 'self', 'holonko1', 'io-1' ) ], 
-            'flows':[ ( 'c', 'self' ) ], 
-            # 'flows':[ ( 'self', 'c' ) ], 
-            # 'args':{'protocol': 'tcp'} 
-            'args': {},
-        }, 
-        # { 
-        #     'name':'bla_stdin_http', 
-        #     'flows':[ ( 'd', 'self' ) ], 
-        #     'args':{'protocol': 'tcp'} 
-        # }, 
-        {
-            'name':'bla_file_stdout', 
-            'flows':[ ( 'self', 'c' ) ], 
-            'args': {},
-            # 'args':{'protocol': 'tcp'} 
-        } 
-    ]
-    channels = [ 
-        { 
-            'name':'c', 
-            # 'input':'regex( (?P<act>.*) )', 
-            # 'output':"?act", 
-            'input': None,
-            'output': None,
-            'transformer': "'test' + x"
-        }, 
-        # { 
-        #     'name':'d', 
-        #     # 'input':'regex( (?P<act>.*) )', 
-        #     # 'output':"{ 'action':'?act', 'history':'?act' }", 
-        #     'input':'regex( (?P<act>.*) )', 
-        #     'output':"?act", 
-        #     'transformer':None 
-        # } 
-    ]
-    environment = [ 
-        { 
-            'name': 'io-1', 
-            'input': "{ 'val1': ?x }", 
-            'output': "{ 'val2': ?y }" 
-            } 
-        ]
-    
-    holons = []
-    execution_plan = ['bla_file_stdout bla_stdin_stdout']
+        h1 = APiHolon( 'holonko1', h1name, h1password, agents, channels, environment, holons, execution_plans )
+        h1.start()
+        
+        input("Press enter to interrupt")
 
-    h1 = APiHolon( 'holonko1', h1name, h1password, agents, channels, environment, holons, execution_plan )
-    h1.start()
-    
-    input("Press enter to interrupt")
-
-    spade.quit_spade()
+        spade.quit_spade()
 

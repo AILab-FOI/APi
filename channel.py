@@ -8,7 +8,7 @@ class APiChannel( APiBaseAgent ):
     '''Channel agent.'''
 
     REPL_STR = '"$$$API_THIS_IS_VARIABLE_%s$$$"'
-    def __init__( self, channelname, name, password, holon, token, portrange, channel_input=None, channel_output=None, transformer=None ):
+    def __init__( self, channelname, name, password, holon, token, portrange, protocol, channel_input=None, channel_output=None ):
         self.channelname = channelname
         self.holon = holon
         super().__init__( name, password, token )
@@ -22,7 +22,6 @@ class APiChannel( APiBaseAgent ):
         self.min_port, self.max_port = portrange
 
         self.attach_servers = []
-        self.subscribe_servers = []
 
         self.agree_message_template = {}
         self.agree_message_template[ 'performative' ] = 'agree'
@@ -42,33 +41,24 @@ class APiChannel( APiBaseAgent ):
         
         self.input = channel_input
         self.output = channel_output
-        self.transformer = transformer
 
         # we create one channel each, for tcp & udp communication since agent may request
         # one protocol or another
-        tcp_srv, tcp_ip, tcp_port, tcp_protocol = self.get_server( 'tcp' )
-        self.tcp_sub_server = {
-            "server": tcp_srv,
-            "ip": tcp_ip,
-            "port": tcp_port,
-            "protocol": tcp_protocol
+        self.protocol = protocol
+        srv, ip, port, protocol = self.get_server( protocol )
+        self.socket_server = {
+            "server": srv,
+            "ip": ip,
+            "port": port,
+            "protocol": protocol
         }        
-        udp_srv, udp_ip, udp_port, udp_protocol = self.get_server( 'udp' )
-        self.udp_sub_server = {
-            "server": udp_srv,
-            "ip": udp_ip,
-            "port": udp_port,
-            "protocol": udp_protocol
-        }
 
         self.client_sockets = []
 
         # iterating over netcat server clients is blocking, thus we run it in thread
         # that wont block the runtime
-        self.tcp_cli_sock_t = Thread( target=self.get_server_clients, args=(tcp_srv,) )
-        self.tcp_cli_sock_t.start()
-        self.udp_cli_sock_t = Thread( target=self.get_server_clients, args=(udp_srv,) )
-        self.udp_cli_sock_t.start()
+        self.cli_socket = Thread( target=self.get_server_clients, args=(srv,) )
+        self.cli_socket.start()
         
         # TODO: return map function based on channel_input/output
         # descriptor (can be JSON, XML, REGEX, TRANSFORMER, TRANSPARENT)
@@ -82,10 +72,7 @@ class APiChannel( APiBaseAgent ):
 
         
         if not self.input or not self.output:
-            if self.transformer:
-                self.map = lambda x: eval(self.transformer)
-            else:
-                self.map = lambda x: x
+            self.map = lambda x: x
         else:
             if self.transformer:
                 err = "Both input/output combination and transformer defined. I don't know which mapping to use."
@@ -149,11 +136,6 @@ class APiChannel( APiBaseAgent ):
             output = output.replace( '?' + var[ 1: ], val )
         return output
             
-
-    def map_transformer( self, data ):
-        # TODO: Implement transformer
-        raise NotImplementedError( NIE )
-
     def map_json( self, data ):
         query = " APIRES = ok, open_string( '%s', S ), json_read_dict( S, X ). " % data
         res = self.kb.query( query )
@@ -169,25 +151,36 @@ class APiChannel( APiBaseAgent ):
         raise NotImplementedError( NIE )
 
     def get_server_clients( self, server ):
-        for client in server:
-            self.client_sockets.append( client )
+        if self.protocol == "udp":
+            for _, client in server:
+                self.client_sockets.append( client )
+        else:
+            for client in server:
+                self.client_sockets.append( client )
 
     def send_to_subscribed_agents( self, msg ):
-        closed_clients = []
-        for idx, client in enumerate( self.client_sockets ):
-            try:
-                client.sendline( msg )
-            except Exception as ex:
-                print("Run into error sending a msg over socket", ex)
-                closed_clients.append(idx)
+        if self.protocol == "udp":
+            for client in self.client_sockets:
+                self.socket_server['server'].respond(msg, client)
+        else:
+            closed_clients = []
+            for idx, client in enumerate( self.client_sockets ):
+                try:
+                    client.sendline( msg )
+                except Exception as ex:
+                    print("Run into error sending a msg over socket", ex)
+                    closed_clients.append(idx)
 
-        # remove closed sockets -- might have to deal with concurrency
-        # for idx in closed_clients:
-            # del self.client_sockets[idx]
+            # remove closed sockets -- might have to deal with concurrency
+            # for idx in closed_clients:
+                # del self.client_sockets[idx]
 
     def get_free_port( self ):
         '''Get a free port on the host'''
-        sock = socket.socket( socket.AF_INET, socket.SOCK_STREAM )
+        if self.protocol == "tcp":
+            sock = socket.socket( socket.AF_INET, socket.SOCK_STREAM )
+        else:
+            sock = socket.socket( type=socket.SOCK_DGRAM )
         port = self.min_port
         while port <= self.max_port:
             try:
@@ -215,7 +208,9 @@ class APiChannel( APiBaseAgent ):
     
     def create_server( self, port, protocol ):
         if protocol == 'udp':
-            return nclib.UDPServer( ( '0.0.0.0', port ) )
+            srv = nclib.UDPServer( ( '0.0.0.0', port ) )
+            srv.sock.bind(( '0.0.0.0', port ))
+            return srv
         
         return nclib.TCPServer( ( '0.0.0.0', port ) )
 
@@ -233,13 +228,14 @@ class APiChannel( APiBaseAgent ):
                 srv_created = True
                 print( f'{protocol} SERVER CONNECTED AT PORT', port )
             except OSError as e:
+                print("Error starting socket server", e, port)
                 port = self.get_free_port()
 
         return srv, host, str( port ), protocol
 
 
     def get_subscribe_server( self, protocol ):
-        instance = self.tcp_sub_server if protocol == "tcp" else self.udp_sub_server
+        instance = self.socket_server
 
         srv = instance['server']
         ip = instance['ip']
@@ -274,14 +270,13 @@ class APiChannel( APiBaseAgent ):
                     metadata = deepcopy( self.agent.agree_message_template )
                     metadata[ 'in-reply-to' ] = msg.metadata[ 'reply-with' ]
                     metadata[ 'agent' ] = self.agent.channelname
-                    req_protocol = msg.metadata[ 'protocol' ]
                     if msg.metadata[ 'performative' ] == 'subscribe':
                         metadata[ 'type' ] = 'input'
-                        _, ip, port, protocol = self.agent.get_subscribe_server( req_protocol )
+                        _, ip, port, protocol = self.agent.get_subscribe_server( self.agent.protocol )
                         print( 'ADDED subscribe server', ip, port )
                     elif msg.metadata[ 'performative' ] == 'request':
                         metadata[ 'type' ] = 'output'
-                        _, ip, port, protocol = self.agent.get_attach_server( req_protocol )
+                        _, ip, port, protocol = self.agent.get_attach_server( self.agent.protocol )
                         print( 'ADDED attach server', ip, port )
                     else:
                         self.agent.say( 'Unknown message' )
@@ -308,14 +303,18 @@ class APiChannel( APiBaseAgent ):
         async def run( self ):
 
             def iter_clients( srv ):
-                try:
-                    c, a = srv.sock.accept()
-                    client = nclib.Netcat( sock=c, server=a )
-                    yield client
-                    for client in srv:
+                if self.agent.protocol == "udp":
+                    yield srv
+                else:
+                    try:
+                        c, a = srv.sock.accept()
+                        is_udp = True if self.agent.protocol == "udp" else False
+                        client = nclib.Netcat( sock=c, server=a, udp=is_udp )
                         yield client
-                except Exception as e:
-                    return
+                        for client in srv:
+                            yield client
+                    except Exception as e:
+                        return
             
             # Slusaju se poruke od svih agenata koji su attached, te je ovo cyclic behv jer
             # rec_until nije awaitan, nego mora biti u loopu. nakon sto se dohvati poruka, onda
@@ -325,24 +324,22 @@ class APiChannel( APiBaseAgent ):
                     srv.sock.settimeout( 0.1 )
                     for client in iter_clients( srv ):
                         self.agent.say( 'CLIENT', client, srv.addr )
-                        result = client.recv_until( self.agent.delimiter, timeout=0.1 )
+                        if self.agent.protocol == "udp":
+                            result = None
+                            try:
+                                result, _ = client.sock.recvfrom(1024)
+                            except:
+                                pass
+                        else:
+                            result = client.recv_until( self.agent.delimiter, timeout=0.1 )
                         self.agent.say( 'RESULT', result, srv.addr )
                         if result:
                             self.agent.say( 'MAPPING RESULT', result.decode(), srv.addr )
                             msg = self.agent.map( result.decode() )
-                            self.agent.say( 'MSG', msg, srv.addr )
-                            self.agent.say( 'SERVER LIST 1', self.agent.subscribe_servers )
+                            self.agent.say( 'MSG', msg, srv.addr )                        
 
                             self.agent.send_to_subscribed_agents( msg.encode() )
 
-                            # if self.agent.subscribe_servers:
-                            #     self.agent.say( 'SERVER LIST 2', self.agent.subscribe_servers )
-                            #     for srv_out in self.agent.subscribe_servers:
-                            #         self.agent.say( 'OUT SERVER', srv_out, srv_out.addr )
-                            #         for client_out in srv_out:
-                            #             self.agent.say( 'SENDING MSG TO', client_out, client_out.peer )
-                            #             client_out.sendline( msg.encode() )
-                            #             self.agent.say( 'DONE SENDING MSG' )
                     
     async def setup(self):
         super().setup()
@@ -362,12 +359,11 @@ class APiChannel( APiBaseAgent ):
         self.add_behaviour( bfwd )
 
 
-def main( name, address, password, holon, token, portrange, input, output, transformer ):
+def main( name, address, password, holon, token, portrange, protocol, input, output ):
     portrange = json.loads( portrange )
     input = json.loads( input )
     output = json.loads( output )
-    transformer = json.loads( transformer )
-    a = APiChannel( name, address, password, holon, token, portrange, channel_input=input, channel_output=output, transformer=transformer )
+    a = APiChannel( name, address, password, holon, token, portrange, protocol=protocol, channel_input=input, channel_output=output )
     a.start()
 
 if __name__ == '__main__':
@@ -378,9 +374,10 @@ if __name__ == '__main__':
     parser.add_argument( 'holon', metavar='HOLON', type=str, help="Channel's instantiating holon's XMPP/JID address" )
     parser.add_argument( 'token', metavar='TOKEN', type=str, help="Channel's security token" )
     parser.add_argument( 'portrange', metavar='PORTRANGE', type=str, help="Channel's port range" )
+    parser.add_argument( 'protocol', metavar='PROTOCOL', type=str, help="Channel's protocol specification" )
     parser.add_argument( 'input', metavar='INPUT', type=str, help="Channel's input specification" )
     parser.add_argument( 'output', metavar='OUTPUT', type=str, help="Channel's output specification" )
-    parser.add_argument( 'transformer', metavar='TRANSFORMER', type=str, help="Channel's transformer specification" )
+    
 
     args = parser.parse_args()
-    main( args.name, args.address, args.password, args.holon, args.token, args.portrange, args.input, args.output, args.transformer )
+    main( args.name, args.address, args.password, args.holon, args.token, args.portrange, args.protocol, args.input, args.output )

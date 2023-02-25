@@ -23,7 +23,8 @@ def get_next_agent(remaining_sequence):
 """
 Resolving execution plan expression -> finding agents, their dependencies, and operators
 """
-def get_agents_and_operations(sequence):
+def get_agents_and_operations(sequence_args):
+    sequence, args = sequence_args
     # sequence_split = list(sequence)
     sequence_split = sequence.split(" ")
     agents = {}
@@ -44,12 +45,16 @@ def get_agents_and_operations(sequence):
         else:
             i += 1
 
+        args_by_agent = args.get(curr_agent, None)
+        agent_args = args_by_agent.pop(0) if args_by_agent is not None else None
+
         agent = {
             'id': curr_id,
             'name': curr_agent,
             'operator': operator,
             'succeeding_agent_id': next_id,
-            'status': 'ready_to_start'
+            'status': 'ready_to_start',
+            'args': agent_args
         }
 
         agents[curr_id] = agent
@@ -68,6 +73,81 @@ Finding out what are the initial agents that need to be run
 def get_initial_agents_to_run(parallel_flows):
     return [list(flow.keys())[0] for flow in parallel_flows]
 
+def extract_brackets(flow):
+    brackets = []
+
+    arg_list_start_index = None
+    for i in range(0, len(flow)):
+        curr_c = flow[i]
+        prev_c = flow[i - 1] if i > 0 else None
+
+        if curr_c == "(":
+            if prev_c == " " or prev_c is None:
+                brackets.append(i)
+            else:
+                arg_list_start_index = i
+        elif curr_c == ")":
+            if arg_list_start_index:
+                brackets.append((arg_list_start_index, i))
+                arg_list_start_index = None
+            else:
+                brackets.append(i)
+
+    return brackets
+
+def extract_args(flow, brackets):
+    args_by_agent = {}
+    for brackets_pair in brackets:
+        if type(brackets_pair) != tuple:
+            continue
+        
+        start, end = brackets_pair
+        start_index = start - 1
+        
+        while start_index >= 0:
+            c = flow[start_index]
+            if c == " ":
+                start_index = start_index + 1
+                break
+
+            start_index = start_index - 1
+
+        start_index = max(start_index, 0)
+
+        name = flow[start_index:start]
+        args_str = flow[start+1:end]
+        args = args_str.split(" ")
+        
+        if name not in args_by_agent:
+            args_by_agent[name] = []    
+
+        args_by_agent[name].append(args)
+
+    return args_by_agent
+
+def clean_up_flow(flow, brackets):
+    new_flow = flow
+    removed_chars = 0
+    for brackets_pair in brackets:
+        if type(brackets_pair) == tuple:
+            start, end = brackets_pair
+            new_flow = new_flow[:start-removed_chars] + new_flow[end-removed_chars+1:]
+            removed_chars = removed_chars + (end - start + 1)
+        else:
+            start = brackets_pair
+            new_flow = new_flow[:start-removed_chars] + new_flow[start-removed_chars+1:]
+            removed_chars = removed_chars + 1
+
+    return new_flow
+
+def extract_args_and_clean_up(flow):
+    brackets = extract_brackets(flow)
+    args_by_agent = extract_args(flow, brackets)
+    new_flow = clean_up_flow(flow, brackets).strip()
+    
+    return new_flow, args_by_agent
+
+
 """
 Converting execution plan
 """
@@ -76,7 +156,7 @@ def resolve_execution_plan(execution_plan):
     parallel = execution_plan.split('|')
     
     # trim and remove unused chars
-    cleaned_exp = [exp.replace("(", "").replace(")", "").strip() for exp in parallel]
+    cleaned_exp = [extract_args_and_clean_up(exp) for exp in parallel]
 
     # resolve agents and operations
     parallel_flows = [get_agents_and_operations(item) for item in cleaned_exp]
@@ -91,7 +171,9 @@ def resolve_execution_plan(execution_plan):
 
     return {"id": uuid4().hex, "plan": agents, "initial_agents_to_run": initial_agents, "started": False}
 
+# execution_plans = ['a(c a) a(b r) | (b c)']
 # execution_plans_resolved = [resolve_execution_plan(plan) for plan in execution_plans]
+# print(execution_plans_resolved)
 
 """
 Getting execution plan by id

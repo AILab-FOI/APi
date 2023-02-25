@@ -8,12 +8,11 @@ class APiEnvironment( APiBaseAgent ):
     '''Environment agent.'''
 
     REPL_STR = '"$$$API_THIS_IS_VARIABLE_%s$$$"'
-    def __init__( self, environment_name, name, password, holon, token, communication ):
+    def __init__( self, environment_name, name, password, holon, token, environment_input, environment_output ):
         super().__init__( name, password, token )
         
         self.environment_name = environment_name
         self.holon = holon
-        self.communication = communication
 
         self.attach_servers = []
         self.subscribe_servers = []
@@ -27,6 +26,9 @@ class APiEnvironment( APiBaseAgent ):
         self.refuse_message_template[ 'performative' ] = 'refuse'
         self.refuse_message_template[ 'ontology' ] = 'APiDataTransfer'
         self.refuse_message_template[ 'auth-token' ] = self.auth
+
+        self.input = environment_input
+        self.output = environment_output
 
     def get_free_port( self ):
         '''Get a free port on the host'''
@@ -181,9 +183,8 @@ class APiEnvironment( APiBaseAgent ):
         bfwd = self.Forward()
         self.add_behaviour( bfwd )
 
-def main( name, address, password, holon, token, communication ):
-    communication = json.loads( communication )
-    a = APiEnvironment( name, address, password, holon, token, communication )
+def main( name, address, password, holon, token, input, output ):
+    a = APiEnvironment( name, address, password, holon, token, input, output )
     a.start()
 
 if __name__ == '__main__':
@@ -193,7 +194,8 @@ if __name__ == '__main__':
     parser.add_argument( 'password', metavar='PWD', type=str, help="Environment's XMPP/JID password" )
     parser.add_argument( 'holon', metavar='HOLON', type=str, help="Environment's instantiating holon's XMPP/JID address" )
     parser.add_argument( 'token', metavar='TOKEN', type=str, help="Environment's security token" )
-    parser.add_argument( 'communication', metavar='COMMUNICATION', type=str, help="Environment's inputs/outputs definition" )
+    parser.add_argument( 'input', metavar='INPUT', type=str, help="Channel's input specification" )
+    parser.add_argument( 'output', metavar='OUTPUT', type=str, help="Channel's output specification" )
 
     args = parser.parse_args()
-    main( args.name, args.address, args.password, args.holon, args.token, args.communication )
+    main( args.name, args.address, args.password, args.holon, args.token, args.input, args.output )

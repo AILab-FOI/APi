@@ -1,4 +1,4 @@
-# Generated from APi.g4 by ANTLR 4.9
+# Generated from APi.g4 by ANTLR 4.12.0
 from antlr4 import *
 if __name__ is not None and "." in __name__:
     from .APiParser import APiParser
@@ -80,12 +80,12 @@ class APiListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by APiParser#flow.
-    def enterFlow(self, ctx:APiParser.FlowContext):
+    # Enter a parse tree produced by APiParser#aflow.
+    def enterAflow(self, ctx:APiParser.AflowContext):
         pass
 
-    # Exit a parse tree produced by APiParser#flow.
-    def exitFlow(self, ctx:APiParser.FlowContext):
+    # Exit a parse tree produced by APiParser#aflow.
+    def exitAflow(self, ctx:APiParser.AflowContext):
         pass
 
 
@@ -107,12 +107,12 @@ class APiListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by APiParser#s_channel_transformer.
-    def enterS_channel_transformer(self, ctx:APiParser.S_channel_transformerContext):
+    # Enter a parse tree produced by APiParser#s_channel_forward.
+    def enterS_channel_forward(self, ctx:APiParser.S_channel_forwardContext):
         pass
 
-    # Exit a parse tree produced by APiParser#s_channel_transformer.
-    def exitS_channel_transformer(self, ctx:APiParser.S_channel_transformerContext):
+    # Exit a parse tree produced by APiParser#s_channel_forward.
+    def exitS_channel_forward(self, ctx:APiParser.S_channel_forwardContext):
         pass
 
 
