@@ -82,13 +82,6 @@ class APiChannel( APiBaseChannel ):
 
         return srv, host, port, protocol
 
-    class StatusListening( OneShotBehaviour ):
-        async def run( self ):
-            metadata = deepcopy( self.agent.inform_msg_template )
-            metadata[ 'status' ] = 'listening'
-            metadata[ 'type' ] = 'channel'
-            await self.agent.schedule_message( self.agent.holon, metadata=metadata )
-    
     class Subscribe( CyclicBehaviour ):
         '''Agent wants to listen or write to channel'''
         async def run( self ):

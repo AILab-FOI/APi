@@ -54,9 +54,9 @@ class APiEnvironment( APiBaseChannel ):
 
         # iterating over netcat server clients is blocking, thus we run it in thread
         # that wont block the runtime
-        self.input_subscribe_cli_socket = Thread( target=self.get_server_clients, args=(self.input_subscribe_socket_server,"input_subscribe_socket_clients") )
+        self.input_subscribe_cli_socket = Thread( target=self.get_server_clients, args=(self.input_subscribe_socket_server['server'], "input_subscribe_socket_clients") )
         self.input_subscribe_cli_socket.start()            
-        self.output_subscribe_cli_socket = Thread( target=self.get_server_clients, args=(self.output_subscribe_socket_server,"output_subscribe_socket_clients") )
+        self.output_subscribe_cli_socket = Thread( target=self.get_server_clients, args=(self.output_subscribe_socket_server['server'], "output_subscribe_socket_clients") )
         self.output_subscribe_cli_socket.start()
 
     def send_to_subscribed_agents( self, sub_type, msg ):
@@ -98,14 +98,6 @@ class APiEnvironment( APiBaseChannel ):
             self.output_attach_servers.append( srv )
 
         return srv, host, port, protocol
-
-    class StatusListening( OneShotBehaviour ):
-        async def run( self ):
-            metadata = deepcopy( self.agent.inform_msg_template )
-            metadata[ 'status' ] = 'listening'
-            metadata[ 'type' ] = 'channel'
-            await self.agent.schedule_message( self.agent.holon, metadata=metadata )
-    
     class Subscribe( CyclicBehaviour ):
         '''Agent wants to listen or write to channel'''
         async def run( self ):
@@ -115,26 +107,29 @@ class APiEnvironment( APiBaseChannel ):
                     self.agent.say( '(Subscribe) Message verified, processing ...' )
                     metadata = deepcopy( self.agent.agree_message_template )
                     metadata[ 'in-reply-to' ] = msg.metadata[ 'reply-with' ]
-                    metadata[ 'agent' ] = self.agent.channelname
                     # subscribing to environment input
                     if msg.metadata[ 'performative' ] == 'subscribe_to_input':
+                        metadata[ 'agent' ] = 'ENV_INPUT'
                         metadata[ 'type' ] = 'input'
                         _, ip, port, protocol = self.agent.get_subscribe_server( "input", self.agent.protocol )
                         print( 'ADDED input subscribe server', ip, port )
                     # subscribing to environment output
                     elif msg.metadata[ 'performative' ] == 'subscribe_to_output':
+                        metadata[ 'agent' ] = 'ENV_OUTPUT'
                         metadata[ 'type' ] = 'input'
                         _, ip, port, protocol = self.agent.get_subscribe_server( "output", self.agent.protocol )
                         print( 'ADDED output subscribe server', ip, port )
                     # attaching to environment output
                     elif msg.metadata[ 'performative' ] == 'request_to_input':
+                        metadata[ 'agent' ] = 'ENV_INPUT'
                         metadata[ 'type' ] = 'output'
                         _, ip, port, protocol = self.agent.get_attach_server( "input", self.agent.protocol )
                         print( 'ADDED input attach server', ip, port )
                     elif msg.metadata[ 'performative' ] == 'request_to_output':
+                        metadata[ 'agent' ] = 'ENV_OUTPUT'
                         metadata[ 'type' ] = 'output'
                         _, ip, port, protocol = self.agent.get_attach_server( "output", self.agent.protocol )
-                        print( 'ADDED outpupt attach server', ip, port )
+                        print( 'ADDED output attach server', ip, port )
                     else:
                         self.agent.say( 'Unknown message' )
                         metadata = self.agent.refuse_message_template
@@ -156,6 +151,7 @@ class APiEnvironment( APiBaseChannel ):
     
     class Forward( CyclicBehaviour ):
         def __init__( self, sub_type, attach_servers ):
+            super().__init__()
             self.sub_type = sub_type
             self.attach_servers = attach_servers
 
@@ -211,10 +207,10 @@ class APiEnvironment( APiBaseChannel ):
         bsubs_template = Template(metadata={"ontology": "APiDataTransfer"})      
         self.add_behaviour( bsubs, bsubs_template )
         
-        bifwd = self.Forward("input", self.agent.input_attach_servers)
+        bifwd = self.Forward("input", self.input_attach_servers)
         self.add_behaviour( bifwd )
 
-        bofwd = self.Forward("output", self.agent.output_attach_servers)
+        bofwd = self.Forward("output", self.output_attach_servers)
         self.add_behaviour( bofwd )
 
 

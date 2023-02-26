@@ -35,7 +35,8 @@ class APiHolon( APiTalkingAgent ):
             self.setup_holon( h )
 
         self.execution_plans = None
-        self.setup_execution( execution_plans )
+        if len(execution_plans) > 0:
+            self.setup_execution( execution_plans )
 
         self.all_channels_listening = False
         self.all_agents_listening = False
@@ -152,7 +153,6 @@ class APiHolon( APiTalkingAgent ):
         print("finished", a_id, plan_id, status)
         print("finished", a_id, plan_id, status)
         print("finished", a_id, plan_id, status)
-        pass
 
     def start_dependant_agent_thread( self, a_id, plan_id, cmd ):
         proc = sp.Popen( cmd, start_new_session=True )
@@ -284,7 +284,8 @@ class APiHolon( APiTalkingAgent ):
                     metadata[ 'agent' ] = channel
 
                     try:
-                        if self.agent.environment and channel == self.agent.environment[ 'holon_name' ]:
+                        if self.agent.environment and channel == 'ENVIRONMENT':
+                            metadata[ 'agent' ] = 'ENVIRONMENT'
                             address = self.agent.environment[ 'address' ]
                         else:                            
                             address = self.agent.channels[ channel ][ 'address' ]
@@ -333,6 +334,7 @@ class APiHolon( APiTalkingAgent ):
                 if self.agent.verify( msg ):
                     self.agent.say( '(GetListeningAgents) Message verified, processing ...' )
                     type = msg.metadata[ 'type' ]
+                    
                     if type == 'channel':
                         channel = self.agent.channel_name_from_address( msg.sender.bare() )
                         self.agent.say( '(QueryNameGetReadyChannel) Setting channel', channel, 'status to listening.' )
@@ -358,6 +360,8 @@ class APiHolon( APiTalkingAgent ):
 
                             if all_ready:
                                 self.agent.all_agents_listening = True
+                    elif type == 'environment':
+                        self.agent.environment[ 'status' ] = 'listening'
                 else:
                     self.agent.say( 'Message could not be verified. IMPOSTER!!!!!!' )
                     metadata = deepcopy( self.agent.refuse_message_template )
@@ -366,7 +370,7 @@ class APiHolon( APiTalkingAgent ):
 
     class AllChannelsListening( OneShotBehaviour ):
         async def run( self ):
-            while (not self.agent.all_channels_listening):
+            while ((len(self.agent.channels.values()) > 0 and not self.agent.all_channels_listening) or (self.agent.environment is not None and self.agent.environment['status'] != 'listening')):
                 await asyncio.sleep( 1 )
 
             self.agent.setup_agents()
