@@ -363,11 +363,8 @@ class APiBaseAgent( APiTalkingAgent ):
         self.BUFFER.extend( inp )
         print( 'BUFFER IS NOW', self.BUFFER )
 
-        # TODO: len(data) == 1 is workaround
-        # if data == self.input_end or len(data) == 1:
         if data == self.input_end:
-            quit = self.service_quit( 'Got end delimiter on STDIN, quitting!' )
-            asyncio.ensure_future(quit)
+            self.service_quit( 'Got end delimiter on STDIN, quitting!' )
 
 
     
