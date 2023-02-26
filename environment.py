@@ -1,21 +1,18 @@
 #!/usr/bin/env python3
 
-from baseagent import *
+from basechannel import *
 import json
 import argparse
 
-class APiEnvironment( APiBaseAgent ):
+class APiEnvironment( APiBaseChannel ):
     '''Environment agent.'''
 
-    REPL_STR = '"$$$API_THIS_IS_VARIABLE_%s$$$"'
-    def __init__( self, environment_name, name, password, holon, token, environment_input, environment_output ):
-        super().__init__( name, password, token )
-        
-        self.environment_name = environment_name
-        self.holon = holon
-
-        self.attach_servers = []
-        self.subscribe_servers = []
+    def __init__( self, channelname, name, password, holon, token, portrange, protocol, channel_input=None, channel_output=None ):
+        # revert and pass proper input & output
+        super().__init__( channelname, name, password, holon, token, portrange, None, None  )
+        # used for external agents that will communicate with holon / environment
+        self.input_attach_servers = []
+        self.output_attach_servers = []
 
         self.agree_message_template = {}
         self.agree_message_template[ 'performative' ] = 'agree'
@@ -27,92 +24,117 @@ class APiEnvironment( APiBaseAgent ):
         self.refuse_message_template[ 'ontology' ] = 'APiDataTransfer'
         self.refuse_message_template[ 'auth-token' ] = self.auth
 
-        self.input = environment_input
-        self.output = environment_output
+        self.inform_msg_template = {}
+        self.inform_msg_template[ 'performative' ] = 'inform'
+        self.inform_msg_template[ 'ontology' ] = 'APiScheduling'
+        self.inform_msg_template[ 'type' ] = 'environment'
+        self.inform_msg_template[ 'auth-token' ] = self.auth
 
-    def get_free_port( self ):
-        '''Get a free port on the host'''
-        sock = socket.socket( socket.AF_INET, socket.SOCK_STREAM )
-        port = self.min_port
-        while port <= self.max_port:
-            try:
-                sock.bind( ( '', port ) )
-                sock.close()
-                return port
-            except OSError:
-                port += 1
-        raise IOError( 'No free ports in range %d - %d' % ( self.min_port, self.max_port ) )
+        self.protocol = protocol
+        # we create one channel each, for tcp & udp communication since agent may request
+        # one protocol or another
+        srv, ip, port, protocol = self.get_server( protocol )
+        self.input_subscribe_socket_server = {
+            "server": srv,
+            "ip": ip,
+            "port": port,
+            "protocol": protocol
+        }
+        srv, ip, port, protocol = self.get_server( protocol )
+        # used for external agents that will communicate with holon / environment
+        self.output_subscribe_socket_server = {
+            "server": srv,
+            "ip": ip,
+            "port": port,
+            "protocol": protocol
+        }        
 
-    def get_ip( self ):
-        '''Get the current IP address of the agent'''
-        # TODO: Verify this works with outside network
-        #       addresses!
-        s = socket.socket( socket.AF_INET, socket.SOCK_DGRAM )
-        try:
-            # doesn't even have to be reachable
-            s.connect( ( '10.255.255.255', 1 ) )
-            IP = s.getsockname()[ 0 ]
-        except Exception:
-            IP = '127.0.0.1'
-        finally:
-            s.close()
-        return IP
-    
-    def create_server( self, port, protocol ):
-        if protocol == 'udp':
-            return nclib.UDPServer( ( '0.0.0.0', port ) )
-        
-        return nclib.TCPServer( ( '0.0.0.0', port ) )
+        self.socket_clients['input_subscribe_socket_clients'] = []
+        self.socket_clients['output_subscribe_socket_clients'] = []
 
-    def get_server( self, srv_type, protocol, io_name ):
-        '''Get a NetCat server for sending or receiving'''
-        port =  self.get_free_port()
-        host = self.get_ip()
+        # iterating over netcat server clients is blocking, thus we run it in thread
+        # that wont block the runtime
+        self.input_subscribe_cli_socket = Thread( target=self.get_server_clients, args=(self.input_subscribe_socket_server,"input_subscribe_socket_clients") )
+        self.input_subscribe_cli_socket.start()            
+        self.output_subscribe_cli_socket = Thread( target=self.get_server_clients, args=(self.output_subscribe_socket_server,"output_subscribe_socket_clients") )
+        self.output_subscribe_cli_socket.start()
 
-        self.say( host, port )
+    def send_to_subscribed_agents( self, sub_type, msg ):
+        socket_clients = self.socket_clients['input_subscribe_socket_clients'] if sub_type == "input" else self.socket_clients['output_subscribe_socket_clients']
+        s_server = self.input_subscribe_socket_server if sub_type == "input" else self.output_subscribe_socket_server
 
-        srv_created = False
-        while not srv_created:
-            try:
-                srv = self.create_server( port, protocol )
-                srv_created = True
-                print( f'{protocol} SERVER CONNECTED AT PORT', port )
-            except OSError as e:
-                port = self.get_free_port()
-
-                
-        if srv_type == 'attach':
-            self.attach_servers.append( { 'socket': srv, 'io_name': io_name } )
-            print( 'ATTACH SERVERS:', self.attach_servers )
-        elif srv_type == 'subscribe':
-            self.subscribe_servers.append( { 'socket': srv, 'io_name': io_name } )
-            print( 'SUBSCRIBE SERVERS:', self.subscribe_servers )
+        if self.protocol == "udp":
+            for client in socket_clients:
+                s_server['server'].respond(msg, client)
         else:
-            raise APiChannelDefinitionError( 'Unknown server type:', srv_type, io_name )
+            closed_clients = []
+            for idx, client in enumerate( socket_clients ):
+                try:
+                    client.sendline( msg )
+                except Exception as ex:
+                    print("Run into error sending a msg over socket", ex)
+                    closed_clients.append(idx)
+
+            # remove closed sockets -- might have to deal with concurrency
+            # for idx in closed_clients:
+                # del self.socket_clients[idx]
+
+    def get_subscribe_server( self, sub_type, protocol ):
+        instance = self.input_subscribe_socket_server if sub_type == "input" else self.output_subscribe_socket_server
+
+        srv = instance['server']
+        ip = instance['ip']
+        port = instance['port']
+        protocol = instance['protocol']
         
-        return host, str( port ), protocol
+        return srv, ip, port, protocol
 
+    def get_attach_server( self, att_type, protocol ):
+        srv, host, port, protocol = self.get_server( protocol )
 
+        if att_type == "input":
+            self.input_attach_servers.append( srv )
+        else:
+            self.output_attach_servers.append( srv )
+
+        return srv, host, port, protocol
+
+    class StatusListening( OneShotBehaviour ):
+        async def run( self ):
+            metadata = deepcopy( self.agent.inform_msg_template )
+            metadata[ 'status' ] = 'listening'
+            metadata[ 'type' ] = 'channel'
+            await self.agent.schedule_message( self.agent.holon, metadata=metadata )
+    
     class Subscribe( CyclicBehaviour ):
-        '''Agent wants to listen or write to environment'''
+        '''Agent wants to listen or write to channel'''
         async def run( self ):
             msg = await self.receive( timeout=0.1 )
             if msg:
                 if self.agent.verify( msg ):
                     self.agent.say( '(Subscribe) Message verified, processing ...' )
-
                     metadata = deepcopy( self.agent.agree_message_template )
                     metadata[ 'in-reply-to' ] = msg.metadata[ 'reply-with' ]
                     metadata[ 'agent' ] = self.agent.channelname
-                    req_protocol = msg.metadata[ 'protocol' ]
-                    if msg.metadata[ 'performative' ] == 'subscribe':
+                    # subscribing to environment input
+                    if msg.metadata[ 'performative' ] == 'subscribe_to_input':
                         metadata[ 'type' ] = 'input'
-                        server, port, protocol = self.agent.get_server( 'subscribe', req_protocol, msg.metadata[ 'io-name' ] )
-                        print( 'ADDED subscribe server', server, port )
-                    elif msg.metadata[ 'performative' ] == 'request':
+                        _, ip, port, protocol = self.agent.get_subscribe_server( "input", self.agent.protocol )
+                        print( 'ADDED input subscribe server', ip, port )
+                    # subscribing to environment output
+                    elif msg.metadata[ 'performative' ] == 'subscribe_to_output':
+                        metadata[ 'type' ] = 'input'
+                        _, ip, port, protocol = self.agent.get_subscribe_server( "output", self.agent.protocol )
+                        print( 'ADDED output subscribe server', ip, port )
+                    # attaching to environment output
+                    elif msg.metadata[ 'performative' ] == 'request_to_input':
                         metadata[ 'type' ] = 'output'
-                        server, port, protocol = self.agent.get_server( 'attach', req_protocol, msg.metadata[ 'io-name' ]  )
-                        print( 'ADDED attach server', server, port )
+                        _, ip, port, protocol = self.agent.get_attach_server( "input", self.agent.protocol )
+                        print( 'ADDED input attach server', ip, port )
+                    elif msg.metadata[ 'performative' ] == 'request_to_output':
+                        metadata[ 'type' ] = 'output'
+                        _, ip, port, protocol = self.agent.get_attach_server( "output", self.agent.protocol )
+                        print( 'ADDED outpupt attach server', ip, port )
                     else:
                         self.agent.say( 'Unknown message' )
                         metadata = self.agent.refuse_message_template
@@ -120,82 +142,101 @@ class APiEnvironment( APiBaseAgent ):
                         metadata[ 'reason' ] = 'unknown-message'
                         await self.agent.schedule_message( str( msg.sender ), metadata=metadata )
 
-                    metadata[ 'server' ] = server
+                    metadata[ 'server' ] = ip
                     metadata[ 'port' ] = port
                     metadata[ 'protocol' ] = protocol
                     await self.agent.schedule_message( str( msg.sender ), metadata=metadata )
                     await asyncio.sleep( 0.1 )
-
                 else:
                     self.agent.say( 'Message could not be verified. IMPOSTER!!!!!!' )
                     metadata = self.agent.refuse_message_template
                     metadata[ 'in-reply-to' ] = msg.metadata[ 'reply-with' ]
                     metadata[ 'reason' ] = 'security-policy'
                     await self.agent.schedule_message( str( msg.sender ), metadata=metadata )
-
+    
     class Forward( CyclicBehaviour ):
-        '''Receive inputs, map them to outputs and send to subscribers'''
-        # TODO: Test this behaviour
+        def __init__( self, sub_type, attach_servers ):
+            self.sub_type = sub_type
+            self.attach_servers = attach_servers
+
         async def run( self ):
 
             def iter_clients( srv ):
-                try:
-                    c, a = srv.sock.accept()
-                    client = nclib.Netcat( sock=c, server=a )
-                    yield client
-                    for client in srv:
+                if self.agent.protocol == "udp":
+                    yield srv
+                else:
+                    try:
+                        c, a = srv.sock.accept()
+                        is_udp = True if self.agent.protocol == "udp" else False
+                        client = nclib.Netcat( sock=c, server=a, udp=is_udp )
                         yield client
-                except Exception as e:
-                    return
+                        for client in srv:
+                            yield client
+                    except Exception as e:
+                        return
             
-            if self.agent.attach_servers:
-                for entry in self.agent.attach_servers:
-                    srv = entry[ 'srv' ]
-                    #T TODO: properly convert i/o based on the name
-                    io_name = entry[ 'io_name' ]
-
+            # Slusaju se poruke od svih agenata koji su attached, te je ovo cyclic behv jer
+            # rec_until nije awaitan, nego mora biti u loopu. nakon sto se dohvati poruka, onda
+            # se iterira kroz subscribed agente, te se njima salje result
+            if self.attach_servers:
+                for srv in self.attach_servers:
                     srv.sock.settimeout( 0.1 )
                     for client in iter_clients( srv ):
                         self.agent.say( 'CLIENT', client, srv.addr )
-                        result = client.recv_until( self.agent.delimiter, timeout=0.1 )
+                        # TODO should put in a method instead
+                        if self.agent.protocol == "udp":
+                            result = None
+                            try:
+                                result, _ = client.sock.recvfrom(1024)
+                            except:
+                                pass
+                        else:
+                            result = client.recv_until( self.agent.delimiter, timeout=0.1 )
                         self.agent.say( 'RESULT', result, srv.addr )
                         if result:
                             self.agent.say( 'MAPPING RESULT', result.decode(), srv.addr )
                             msg = self.agent.map( result.decode() )
-                            self.agent.say( 'MSG', msg, srv.addr )
-                            self.agent.say( 'SERVER LIST 1', self.agent.subscribe_servers )
-                            if self.agent.subscribe_servers:
-                                self.agent.say( 'SERVER LIST 2', self.agent.subscribe_servers )
-                                for srv_out in self.agent.subscribe_servers:
-                                    self.agent.say( 'OUT SERVER', srv_out, srv_out.addr )
-                                    for client_out in srv_out:
-                                        self.agent.say( 'SENDING MSG TO', client_out, client_out.peer )
-                                        client_out.sendline( msg.encode() )
-                                        self.agent.say( 'DONE SENDING MSG' )
+                            self.agent.say( 'MSG', msg, srv.addr )                        
 
+                            self.agent.send_to_subscribed_agents( self.sub_type, msg.encode() )
+
+                    
     async def setup(self):
         super().setup()
 
+        bsl = self.StatusListening()
+        self.add_behaviour( bsl )
+            
         bsubs = self.Subscribe()
-        bsubs_template = Template( metadata={ "ontology": "APiDataTransfer" } )      
+        bsubs_template = Template(metadata={"ontology": "APiDataTransfer"})      
         self.add_behaviour( bsubs, bsubs_template )
+        
+        bifwd = self.Forward("input", self.agent.input_attach_servers)
+        self.add_behaviour( bifwd )
 
-        bfwd = self.Forward()
-        self.add_behaviour( bfwd )
+        bofwd = self.Forward("output", self.agent.output_attach_servers)
+        self.add_behaviour( bofwd )
 
-def main( name, address, password, holon, token, input, output ):
-    a = APiEnvironment( name, address, password, holon, token, input, output )
+
+def main( name, address, password, holon, token, portrange, protocol, input, output ):
+    portrange = json.loads( portrange )
+    input = json.loads( input )
+    output = json.loads( output )
+    a = APiEnvironment( name, address, password, holon, token, portrange, protocol=protocol, channel_input=input, channel_output=output )
     a.start()
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser( description='APi environment.')
+    parser = argparse.ArgumentParser( description='APi agent.')
     parser.add_argument( 'name', metavar='NAME', type=str, help="Environment's local APi name" )
     parser.add_argument( 'address', metavar='ADDRESS', type=str, help="Environment's XMPP/JID address" )
     parser.add_argument( 'password', metavar='PWD', type=str, help="Environment's XMPP/JID password" )
     parser.add_argument( 'holon', metavar='HOLON', type=str, help="Environment's instantiating holon's XMPP/JID address" )
     parser.add_argument( 'token', metavar='TOKEN', type=str, help="Environment's security token" )
-    parser.add_argument( 'input', metavar='INPUT', type=str, help="Channel's input specification" )
-    parser.add_argument( 'output', metavar='OUTPUT', type=str, help="Channel's output specification" )
+    parser.add_argument( 'portrange', metavar='PORTRANGE', type=str, help="Environment's port range" )
+    parser.add_argument( 'protocol', metavar='PROTOCOL', type=str, help="Environment's protocol specification" )
+    parser.add_argument( 'input', metavar='INPUT', type=str, help="Environment's input specification" )
+    parser.add_argument( 'output', metavar='OUTPUT', type=str, help="Environment's output specification" )
+    
 
     args = parser.parse_args()
-    main( args.name, args.address, args.password, args.holon, args.token, args.input, args.output )
+    main( args.name, args.address, args.password, args.holon, args.token, args.portrange, args.protocol, args.input, args.output )
