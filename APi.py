@@ -81,15 +81,13 @@ if __name__ == '__main__':
 
     print(ns)
 
-    con = True
-    if con:
-        rs = APiRegistrationService( 'APi-test' )
-        h1name, h1password = rs.register( 'holonko1' )
+    rs = APiRegistrationService( 'APi-test' )
+    h1name, h1password = rs.register( 'holonko1' )
 
-        h1 = APiHolon( 'holonko1', h1name, h1password, agents, channels, environment, holons, execution_plans )
-        h1.start()
-        
-        input("Press enter to interrupt")
+    h1 = APiHolon( 'holonko1', h1name, h1password, agents, channels, environment, holons, execution_plans )
+    h1.start()
+    
+    input("Press enter to interrupt")
 
-        spade.quit_spade()
+    spade.quit_spade()
 
