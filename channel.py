@@ -16,11 +16,9 @@ class APiChannel( APiBaseAgent ):
         self.kb = swipl()
         self.var_re = re.compile( r'[\?][a-zA-Z][a-zA-Z0-9-_]*' )
 
-        self.sender_agents = []
-        self.receiver_agents = []
-
         self.min_port, self.max_port = portrange
 
+        # TODO we can use a single server for attach instead of multiple
         self.attach_servers = []
 
         self.agree_message_template = {}
@@ -74,18 +72,13 @@ class APiChannel( APiBaseAgent ):
         if not self.input or not self.output:
             self.map = lambda x: x
         else:
-            if self.transformer:
-                err = "Both input/output combination and transformer defined. I don't know which mapping to use."
-                raise APiChannelDefinitionError( err )
-        
-            
-            elif self.input.startswith( 'regex( ' ):
-                reg = self.input[ 7:-2 ]
+            if self.input.startswith( 'regex(' ):
+                reg = self.input[ 6:-1 ]
                 # print( 'RE', reg )
                 self.input_re = re.compile( reg )
                 self.map = self.map_re
-            elif self.input.startswith( 'json( ' ):
-                self.input_json = self.input[ 6:-2 ]
+            elif self.input.startswith( 'json(' ):
+                self.input_json = self.input[ 5:-1 ]
                 self.kb.query( 'use_module(library(http/json))' )
                 cp = self.input_json
                 replaces = {}
@@ -266,7 +259,6 @@ class APiChannel( APiBaseAgent ):
             if msg:
                 if self.agent.verify( msg ):
                     self.agent.say( '(Subscribe) Message verified, processing ...' )
-                    self.agent.receiver_agents.append( str( msg.sender ) )
                     metadata = deepcopy( self.agent.agree_message_template )
                     metadata[ 'in-reply-to' ] = msg.metadata[ 'reply-with' ]
                     metadata[ 'agent' ] = self.agent.channelname
@@ -298,8 +290,6 @@ class APiChannel( APiBaseAgent ):
                     await self.agent.schedule_message( str( msg.sender ), metadata=metadata )
     
     class Forward( CyclicBehaviour ):
-        '''Receive inputs, map them to outputs and send to subscribers'''
-        # TODO: Test this behaviour
         async def run( self ):
 
             def iter_clients( srv ):
@@ -324,6 +314,7 @@ class APiChannel( APiBaseAgent ):
                     srv.sock.settimeout( 0.1 )
                     for client in iter_clients( srv ):
                         self.agent.say( 'CLIENT', client, srv.addr )
+                        # TODO should put in a method instead
                         if self.agent.protocol == "udp":
                             result = None
                             try:
@@ -348,11 +339,7 @@ class APiChannel( APiBaseAgent ):
         self.add_behaviour( bsl )
             
         bsubs = self.Subscribe()
-        bsubs_template = Template(
-            metadata={ 
-                       "ontology": "APiDataTransfer"
-            } # "performative": "subscribe",
-        )      
+        bsubs_template = Template(metadata={"ontology": "APiDataTransfer"})      
         self.add_behaviour( bsubs, bsubs_template )
         
         bfwd = self.Forward()
