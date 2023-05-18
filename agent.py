@@ -6,7 +6,7 @@ import argparse
 class APiAgent( APiBaseAgent ):
     '''Service wrapper agent.'''
 
-    def __init__( self, agentname, name, password, holon, holon_name, token, args={}, flows=[] ):
+    def __init__( self, agentname, name, password, holon, holon_name, token, flows=[] ):
         '''
         Constructor.
         agentname - name as in agent definition (.ad) file.
@@ -14,7 +14,6 @@ class APiAgent( APiBaseAgent ):
         password - XMPP/Jabber password
         holon - parent holon
         token - token from holon
-        args - list of arguments (from APi statement)
         flows - list of message flows (from APi statement)
         '''        
         try:
@@ -28,46 +27,23 @@ class APiAgent( APiBaseAgent ):
         self.holon_name = holon_name
         self.holon = holon
         self._load( fh )
-        self.read_args( args )
 
         self.flows = []
         for f in flows:
             if len( f ) == 2:
                 pairs = [ i for i in pairwise( f ) ]
+                # print(pairs)
                 self.flows.extend( pairs )
             else:
                 self.flows.append( f )
-
-
-        # inputs are not allways on the LHS
-        # and outputs are not allways on the RHS. We need
-        # to analyze the flows, if self is on the RHS it is
-        # an input to the process and if self is on the
-        # LHS it is an output. If self isn't present
-        # then it is a forward (not processed LHS input is
-        # forwarded directly to RHS output)
-        self.environment = None
-        for i in self.flows:
-            if len( i ) == 3 and ( i[0] == self.holon_name or i[1] == self.holon_name ):
-                if self.environment == None:
-                    self.environment = { 'name': self.holon_name, 'io_name': i[2], 'types': [] }
-
-                if i[ 0 ] == self.holon_name and not "write" in self.environment[ 'types' ]:
-                    self.environment[ 'types' ].append( "write" )
-                elif i[ 1 ] == self.holon_name and not "read" in self.environment[ 'types' ]:
-                    self.environment[ 'types' ].append( "read" )
                 
         self.input_channels = set( i[ 0 ] for i in self.flows if i[ 1 ] == 'self' and len( i ) == 2 )
         self.output_channels = set( i[ 1 ] for i in self.flows if i[ 0 ] == 'self' and len( i ) == 2 )
-        self.forward_channels = set( i for i in self.flows if i[ 0 ] != 'self' and i[ 1 ] != 'self' and len( i ) == 2)
-
-        print( self.flows )
-        print( self.input_channels )
-        print( self.output_channels )
-        print( self.forward_channels )
 
         self.input_channel_query_buffer = []
         self.output_channel_query_buffer = []
+        self.input_env_query_buffer = []
+        self.output_env_query_buffer = []
 
         self.input_channel_servers = {}
         self.output_channel_servers = {}
@@ -79,15 +55,17 @@ class APiAgent( APiBaseAgent ):
 
         self.subscribe_msg_template = {}
         self.subscribe_msg_template[ 'performative' ] = 'subscribe'
-        self.subscribe_msg_template[ 'protocol' ] = self.agent_args[ 'protocol' ]
         self.subscribe_msg_template[ 'ontology' ] = 'APiDataTransfer'
         self.subscribe_msg_template[ 'auth-token' ] = self.auth
 
         self.attach_msg_template = {}
         self.attach_msg_template[ 'performative' ] = 'request'
-        self.attach_msg_template[ 'protocol' ] = self.agent_args[ 'protocol' ]
         self.attach_msg_template[ 'ontology' ] = 'APiDataTransfer'
         self.attach_msg_template[ 'auth-token' ] = self.auth
+
+        self.environment_msg_template = {}
+        self.environment_msg_template[ 'ontology' ] = 'APiDataTransfer'
+        self.environment_msg_template[ 'auth-token' ] = self.auth
 
         self.agree_msg_template = {}
         self.agree_msg_template[ 'performative' ] = 'agree'
@@ -103,6 +81,7 @@ class APiAgent( APiBaseAgent ):
         self.inform_msg_template = {}
         self.inform_msg_template[ 'performative' ] = 'inform'
         self.inform_msg_template[ 'ontology' ] = 'APiScheduling'
+        self.inform_msg_template[ 'type' ] = 'agent'
         self.inform_msg_template[ 'auth-token' ] = self.auth
         # Add exit-status (finished, error) and error-message (actual stacktrace, error code etc.); or add status (ready)
 
@@ -116,15 +95,6 @@ class APiAgent( APiBaseAgent ):
                 self.subscribe_to_channel( i, 'output' )
             except NotImplementedError as e:
                 print( 'Not implemented for', i )
-        for i, o in self.forward_channels:
-            try:
-                self.subscribe_to_channel( i, 'input' )
-            except NotImplementedError as e:
-                print( 'Not implemented for', i )
-            try:
-                self.subscribe_to_channel( o, 'output' )
-            except NotImplementedError as e:
-                print( 'Not implemented for', o )
 
         self.input_ended = False
 
@@ -226,13 +196,10 @@ class APiAgent( APiBaseAgent ):
         else:
             err = 'Invalid agent type: %s' % self.type
             raise APiAgentDefinitionError( err )
-            
-    def read_args( self, args ):
-        self.agent_args = {}
-        self.agent_args[ 'protocol' ] = 'tcp'
-        if args != None and args[ 'protocol' ]:
-            self.agent_args[ 'protocol' ] = args[ 'protocol' ]
     
+    """
+    Method used to invoke sending out message to agents
+    """
     async def output_callback( self, data ):
         '''
         Output callback method.
@@ -282,6 +249,8 @@ class APiAgent( APiBaseAgent ):
                 raise APiChannelDefinitionError( err )
             elif channel == 'STDIN':
                 self.start_shell_client( prompt=True, await_stdin=True )
+            elif channel in ['ENV_INPUT', 'ENV_OUTPUT']:
+                self.input_env_query_buffer.append( channel )
             else:
                 self.say( 'Adding input channel', channel )
                 self.input_channel_query_buffer.append( channel )
@@ -299,10 +268,9 @@ class APiAgent( APiBaseAgent ):
             elif channel == 'STDIN':
                 err = 'Output cannot be STDIN'
                 raise APiChannelDefinitionError( err )
+            elif channel in ['ENV_INPUT', 'ENV_OUTPUT']:
+                self.output_env_query_buffer.append( channel )
             else:
-                # TODO: send message to channel agent
-                # and get instructions on how to
-                # connect
                 self.say( 'Adding output channel', channel )
                 self.output_channel_query_buffer.append( channel )
 
@@ -491,8 +459,11 @@ class APiAgent( APiBaseAgent ):
         return False
 
         
-    async def setup( self ):        
+    async def setup( self ):
         super().setup()
+
+        self.behaviour_sl = self.StatusListening()
+        self.add_behaviour( self.behaviour_sl )
         
         self.behaviour_gca = self.GetChannelAdresses()
         self.add_behaviour( self.behaviour_gca )
@@ -530,15 +501,29 @@ class APiAgent( APiBaseAgent ):
         self.behaviour_l = self.Listen()
         #self.add_behaviour( self.behaviour_l )
 
+
+
         self.behaviour_ss = self.StartService()
         bss_template = Template(
             metadata={ "ontology": "APiScheduling", "action":"start" }
         )
         self.add_behaviour( self.behaviour_ss, bss_template )
         
+    class StatusListening( OneShotBehaviour ):
+        async def run( self ):
+            metadata = deepcopy( self.agent.inform_msg_template )
+            metadata[ 'status' ] = 'listening'            
+            await self.agent.schedule_message( self.agent.holon, metadata=metadata )
 
+    """
+    Sending msg to holon once flows of this agent are identified, so that holon
+    can pass down XMPP details for this agent to communicate with other agents
+
+    Ontology: APiQuery
+    """
     class GetChannelAdresses( OneShotBehaviour ):
         async def run( self ):
+            # waiting for address book containing input channels from holon
             self.agent.say( 'Inputs:', self.agent.input_channel_query_buffer )
             for inp in self.agent.input_channel_query_buffer:
                 metadata = self.agent.query_msg_template
@@ -549,6 +534,7 @@ class APiAgent( APiBaseAgent ):
             self.agent.say( 'Outputs:', self.agent.output_channel_query_buffer )    
             for out in self.agent.output_channel_query_buffer:
                 self.agent.say( 'Looking up channel', out, 'in addressbook' )
+                # in case we retrieved the channel from input channels address book batch
                 try:
                     channel = self.agent.address_book[ out ]
                     self.agent.say( 'Got channel', out, 'address', channel )
@@ -559,20 +545,22 @@ class APiAgent( APiBaseAgent ):
                     metadata[ 'reply-with' ] = str( uuid4().hex )
                     metadata[ 'channel' ] = out
                     await self.agent.schedule_message( self.agent.holon, metadata=metadata )
-            if not self.agent.environment == None:
-                self.agent.say( 'Looking up environment', self.agent.environment[ 'name' ], 'in addressbook' )
+            
+            if len(self.agent.input_env_query_buffer) > 0 or len(self.agent.output_env_query_buffer) > 0:
                 metadata = self.agent.query_msg_template
                 metadata[ 'reply-with' ] = str( uuid4().hex )
-                metadata[ 'channel' ] = self.agent.environment[ 'name' ]
+                metadata[ 'channel' ] = 'ENVIRONMENT'
                 await self.agent.schedule_message( self.agent.holon, metadata=metadata )
-                
-
-
+    
+    """
+    Once address book is available, subscribe to 
+    """
     class SubscribeToInputChannels( OneShotBehaviour ):
         async def run( self ):
             await self.agent.behaviour_gca.join()
             self.agent.say( 'Subscribing to inputs:', self.agent.input_channel_query_buffer )
             for inp in self.agent.input_channel_query_buffer:
+                # waiting until holon sends the address book
                 while inp not in self.agent.address_book:
                     await asyncio.sleep( 0.1 )
                 channel = self.agent.address_book[ inp ]
@@ -580,12 +568,15 @@ class APiAgent( APiBaseAgent ):
                 metadata[ 'reply-with' ] = str( uuid4().hex )
                 await self.agent.schedule_message( channel, metadata=metadata )
 
+    """
+    Letting other agent know that this agent wants to subscribe
+    """
     class AttachToOutputChannels( OneShotBehaviour ):
         async def run( self ):
-            await self.agent.behaviour_stic.join()
+            await self.agent.behaviour_gca.join()
             self.agent.say( 'Attaching to outputs', self.agent.output_channel_query_buffer )
-            
             for out in self.agent.output_channel_query_buffer:
+                # waiting until holon sends the address book
                 while out not in self.agent.address_book:
                     await asyncio.sleep( 0.1 )
                 channel = self.agent.address_book[ out ]
@@ -595,32 +586,35 @@ class APiAgent( APiBaseAgent ):
                 
     class SubscribeToEnvironment( OneShotBehaviour ):
         async def run( self ):
-            await self.agent.behaviour_atoc.join()
-            if not self.agent.environment == None and "read" in self.agent.environment[ 'types' ]:
-                self.agent.say( 'Subscribing to environment:', self.agent.environment[ 'name' ] )
-
-                while self.agent.environment[ 'name' ] not in self.agent.address_book:
+            await self.agent.behaviour_gca.join()
+            self.agent.say( 'Subscribing to environment inputs:', self.agent.input_env_query_buffer )
+            for inp in self.agent.input_env_query_buffer:
+                # waiting until holon sends the address book
+                while 'ENVIRONMENT' not in self.agent.address_book:
                     await asyncio.sleep( 0.1 )
-                environment = self.agent.address_book[ self.agent.environment[ 'name' ] ]
-                metadata = self.agent.subscribe_msg_template
+                channel = self.agent.address_book[ 'ENVIRONMENT' ]
+                metadata = self.agent.environment_msg_template
+                metadata[ 'performative' ] = 'subscribe_to_input' if inp == "ENV_INPUT" else 'subscribe_to_output'
                 metadata[ 'reply-with' ] = str( uuid4().hex )
-                metadata[ 'io-name' ] = self.agent.environment[ 'io_name' ]
-                await self.agent.schedule_message( environment, metadata=metadata )
+                await self.agent.schedule_message( channel, metadata=metadata )
 
     class AttachToEnvironment( OneShotBehaviour ):
         async def run( self ):
-            await self.agent.behaviour_ste.join()
-            if not self.agent.environment == None and "write" in self.agent.environment[ 'types' ]:
-                self.agent.say( 'Attaching to environment', self.agent.environment[ 'name' ] )
-
-                while self.agent.environment[ 'name' ] not in self.agent.address_book:
+            await self.agent.behaviour_gca.join()
+            self.agent.say( 'Subscribing to environment outputs:', self.agent.output_env_query_buffer )
+            for out in self.agent.output_env_query_buffer:
+                # waiting until holon sends the address book
+                while 'ENVIRONMENT' not in self.agent.address_book:
                     await asyncio.sleep( 0.1 )
-                environment = self.agent.address_book[ self.agent.environment[ 'name' ] ]
-                metadata = self.agent.attach_msg_template
+                env = self.agent.address_book[ 'ENVIRONMENT' ]
+                metadata = self.agent.environment_msg_template
+                metadata[ 'performative' ] = 'request_to_input' if out == "ENV_INPUT" else 'request_to_output'
                 metadata[ 'reply-with' ] = str( uuid4().hex )
-                metadata[ 'io-name' ] = self.agent.environment[ 'io_name' ]
-                await self.agent.schedule_message( environment, metadata=metadata )
+                await self.agent.schedule_message( env, metadata=metadata )
 
+    """
+    Once holon passes the address book, we make sure to store it for this agent
+    """
     class QueryChannels( CyclicBehaviour ):
         '''Ask holon for channel addresses'''
         async def run( self ):
@@ -645,7 +639,10 @@ class APiAgent( APiBaseAgent ):
                         self.agent.say( 'I have no memory of this message (%s). (awkward Gandalf look)' % msg.metadata[ 'in-reply-to' ] )           
                 else:
                     self.agent.say( 'Message could not be verified. IMPOSTER!!!!!!' )
-                
+
+    """
+    Once address book is available, we create netcat connection for agents to communicate
+    """                
     class SetupInputChannels( CyclicBehaviour ):
         async def run( self ):
             await self.agent.behaviour_atoc.join()
@@ -668,8 +665,11 @@ class APiAgent( APiBaseAgent ):
                             servers[ channel ][ 'port' ] = int( msg.metadata[ 'port' ] )
                             servers[ channel ][ 'protocol' ] = msg.metadata[ 'protocol' ]
                             servers[ channel ][ 'socket' ] = nclib.Netcat( ( msg.metadata[ 'server' ], int( msg.metadata[ 'port' ] ) ), udp=is_udp )
+                            if is_udp:
+                                servers[ channel ][ 'socket' ].send("connected")
 
                             if len( self.agent.output_channel_servers ) == len( self.agent.output_channels ) and len( self.agent.input_channel_servers ) == len( self.agent.input_channels ):
+                                # letting holon know once agent is all set up
                                 metadata = deepcopy( self.agent.inform_msg_template )
                                 metadata[ 'status' ] = 'ready'
                                 await self.agent.schedule_message( self.agent.holon, metadata=metadata )
@@ -679,9 +679,12 @@ class APiAgent( APiBaseAgent ):
                 else:
                     self.agent.say( 'Message could not be verified. IMPOSTER!!!!!!' )
 
+    """
+    Once address book is available, we create netcat connection for agents to communicate
+    """   
     class SetupOutputChannels( CyclicBehaviour ):
         async def run( self ):
-            await self.agent.behaviour_atoc.join()
+            await self.agent.behaviour_atoc.join()            
             msg = await self.receive( timeout=1 )
             if msg:
                 if self.agent.verify( msg ):
@@ -712,19 +715,33 @@ class APiAgent( APiBaseAgent ):
                 else:
                     self.agent.say( 'Message could not be verified. IMPOSTER!!!!!!' )
 
+    """
+    Once netcat socket is created, this is used to start listening for input, once
+    holon gives a green light, which is executed from StartService
+    """
     class Listen( CyclicBehaviour ):
-        
         async def run( self ):
             # TODO: Deal with forward channels
             if self.agent.all_setup():
                 for srv in self.agent.input_channel_servers.values():
-                    result = srv[ 'socket' ].recv_until( self.agent.delimiter, timeout=0.2 )
-                    sleep( 0.5 ) # TODO: Investigate if this line is needed
+                    is_udp = True if srv['protocol'] == 'udp' else False
+
+                    if is_udp:
+                        result = srv['socket'].recv_until(self.agent.delimiter, timeout=0.1)
+                    else:
+                        result = srv[ 'socket' ].recv_until( self.agent.delimiter, timeout=0.2 )
+                    # sleep( 0.5 ) # TODO: Investigate if this line is needed
                     if result:
                         self.agent.say( '(Listen) Received', result, 'from server', srv[ 'server' ], srv[ 'port' ] )
                         self.agent.input( result.decode() )
                         print( '!'*100 )
+    
+    """
+    Waiting for holon to give green light to start
 
+    Ontology: APiScheduling
+    Status: Start
+    """
     class StartService( CyclicBehaviour ):
         async def run( self ):
             msg = await self.receive( timeout=1 )
@@ -732,17 +749,18 @@ class APiAgent( APiBaseAgent ):
                 if self.agent.verify( msg ):
                     self.agent.say( '(StartService) Message verified, processing ...' )
                     self.agent.say( '(StartService) Holon has scheduled us to start. Starting service!' )
+                    # based on agent description (ws, http, etc.), this will setup the agent to be able to communicate
                     self.agent.service_start()
                     self.agent.add_behaviour( self.agent.behaviour_l ) # Start listening for input
                 else:
                     self.agent.say( 'Message could not be verified. IMPOSTER!!!!!!' )
 
 
-def main( name, address, password, holon, holon_name, token, args, flows ):
-    args = json.loads( args )
+def main( name, address, password, holon, holon_name, token, flows ):
     flows = json.loads( flows )
     flows = [ ( i[ 0 ], i[ 1 ] ) if len(i) == 2 else ( i[ 0 ], i[ 1 ], i[ 2 ] ) for i in flows ]
-    a = APiAgent( name, address, password, holon, holon_name, token, args, flows )
+    a = APiAgent( name, address, password, holon, holon_name, token, flows )
+    
     a.start()
 
 if __name__ == '__main__':
@@ -753,9 +771,8 @@ if __name__ == '__main__':
     parser.add_argument( 'holon', metavar='HOLON', type=str, help="Agent's instantiating holon's XMPP/JID address" )
     parser.add_argument( 'holon_name', metavar='HOLON_NAME', type=str, help="Agent's instantiating holon's name" )
     parser.add_argument( 'token', metavar='TOKEN', type=str, help="Agent's security token" )
-    parser.add_argument( 'args', metavar='ARGS', type=str, help="Agent's instantiation arguments" )
     parser.add_argument( 'flows', metavar='FLOWS', type=str, help="Agent's communication flows" )
 
     args = parser.parse_args()
 
-    main( args.name, args.address, args.password, args.holon, args.holon_name, args.token, args.args, args.flows )
+    main( args.name, args.address, args.password, args.holon, args.holon_name, args.token, args.flows )

@@ -1,0 +1,14 @@
+channel c . 
+channel juhu : 
+	json({?yaaa:"123.321",'1':{'a':2}}) --> json({'var':?yaaa}) 
+agent bla_stdin_stdout : 
+	c -> self 
+	r -> self 
+agent bla_file_stdout (a b c) : 
+	self -> c 
+start a+ 
+start (a b) | c 
+start (a b) & c 
+environment : 
+	input => json({'val1':?x}) 
+	output <= json({'val5':?x}) 

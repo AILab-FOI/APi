@@ -90,7 +90,7 @@ class APiTalkingAgent( Agent ):
             out = [ '%s:' % self.name ]
             out += [ i for i in msg ]
             self.LOG.info( out )'''
-            print( '%s:' % self.name, *msg )
+            # print( '%s:' % self.name, *msg )
 
     def verify( self, msg ):
         return verify( msg.metadata[ 'auth-token' ], str( msg.sender.bare() ) + self.token )
@@ -365,7 +365,7 @@ class APiBaseAgent( APiTalkingAgent ):
 
         if data == self.input_end:
             self.service_quit( 'Got end delimiter on STDIN, quitting!' )
-        
+
 
     
     async def input_stdin_run( self, cmd ):
@@ -1095,6 +1095,7 @@ class APiBaseAgent( APiTalkingAgent ):
             pr.kill()
             self.nc_proc.terminate()
             os.system( 'kill -9 %d' % pid )
+
         self.nc_output_thread_flag = False
         # TODO: Send message to holon that agent has finished
         metadata = deepcopy( self.inform_msg_template )
@@ -1103,9 +1104,7 @@ class APiBaseAgent( APiTalkingAgent ):
         metadata[ 'error-message' ] = 'null'
 
         await self.schedule_message( self.holon, metadata=metadata )
-        
-        
-        
+
     def process_descriptor( self ):
         '''
         Agent descriptor processor (the heart of the agent). Processes
