@@ -177,7 +177,8 @@ class APi( APiListener ):
 
     # Exit a parse tree produced by APiParser#s_import.
     def exitS_import(self, ctx:APiParser.S_importContext):
-        pass
+        holon = ctx.children[2].getText()
+        self.ns.add_holon(holon)
 
 
     # Enter a parse tree produced by APiParser#s_input.

@@ -1,0 +1,2 @@
+agent bla_stdin_stdout : 
+	ENV_INPUT -> self 

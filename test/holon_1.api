@@ -1,0 +1,3 @@
+import holon_2
+agent bla_file_stdout : 
+	self -> holon_2 
