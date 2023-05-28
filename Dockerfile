@@ -9,3 +9,4 @@ RUN apt-get update && \
 COPY requirements.txt requirements.txt
 RUN pip3 install -r requirements.txt
 RUN pip3 install git+https://github.com/AILab-FOI/pyxf
+RUN pip3 install --upgrade aiohttp_jinja2

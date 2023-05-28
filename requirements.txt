@@ -26,7 +26,7 @@ aiohttp == 3.5.4
 # awkward π-nguin/APiListener.py: 2
 # awkward π-nguin/APiParser.py: 3,809,822,835,848,859
 # awkward π-nguin/listener.py: 6
-antlr4_python3_runtime == 4.9
+antlr4_python3_runtime == 4.13.0
 
 # awkward π-nguin/helpers.py: 4
 fnvhash == 0.1.0
