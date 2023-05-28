@@ -9,7 +9,7 @@ from execution_plan import resolve_execution_plan
 class APiHolon( APiTalkingAgent ):
     '''A holon created by an .api file.'''
     '''TODO: Finish holon implementation'''
-    def __init__( self, holonname, name, password, agents, channels, environment, holons, execution_plans ):
+    def __init__( self, holonname, name, password, agents, channels, environment, holons_addressbook, execution_plans ):
         self.token = str( uuid4().hex )
         super().__init__( name, password, str( uuid4().hex ) )
         self.holonname = holonname
@@ -30,9 +30,7 @@ class APiHolon( APiTalkingAgent ):
         for a in agents:
             self.create_agent_types_map( a )
 
-        self.holons = {}
-        for h in holons:
-            self.setup_holon( h )
+        self.holons = holons_addressbook
 
         self.execution_plans = None
         if len(execution_plans) > 0:
@@ -96,7 +94,7 @@ class APiHolon( APiTalkingAgent ):
             flows = self.adjust_flows_by_args(agent[ 'args' ], params, agent[ 'flows' ])
         else:
             flows = agent[ 'flows' ]
-        agent[ 'cmd' ] = 'python3 ../agent.py "%s" "%s" "%s" "%s" "%s" "%s" "%s"' % ( agent[ 'name' ], address, password, self.address, self.holonname, self.token, json.dumps( flows ).replace('"','\\"') )
+        agent[ 'cmd' ] = 'python3 ../agent.py "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s"' % ( agent[ 'name' ], address, password, self.address, self.holonname, self.token, json.dumps( flows ).replace('"','\\"'), json.dumps( list( self.holons.keys() ) ).replace('"','\\"') )
         agent[ 'address' ] = address
         agent[ 'status' ] = 'setup'
         agent[ 'id' ] = id
@@ -284,11 +282,16 @@ class APiHolon( APiTalkingAgent ):
                     metadata[ 'agent' ] = channel
 
                     try:
-                        if self.agent.environment and channel == 'ENVIRONMENT':
-                            metadata[ 'agent' ] = 'ENVIRONMENT'
+                        if (channel == 'ENVIRONMENT' or channel == self.agent.holonname) and self.agent.environment:
                             address = self.agent.environment[ 'address' ]
-                        else:                            
+                        # provjera za channel
+                        elif channel in self.agent.channels:
                             address = self.agent.channels[ channel ][ 'address' ]
+                        elif channel in self.agent.holons:
+                            address = self.agent.holons[ channel ]
+                        else:
+                            raise KeyError('Invalid channel name')
+
                         self.agent.say( 'Found channel', channel, 'address is', address )
 
                         metadata[ 'success' ] = 'true'

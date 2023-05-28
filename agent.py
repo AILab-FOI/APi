@@ -6,7 +6,7 @@ import argparse
 class APiAgent( APiBaseAgent ):
     '''Service wrapper agent.'''
 
-    def __init__( self, agentname, name, password, holon, holon_name, token, flows=[] ):
+    def __init__( self, agentname, name, password, holon, holon_name, token, flows=[], holons=[] ):
         '''
         Constructor.
         agentname - name as in agent definition (.ad) file.
@@ -26,6 +26,7 @@ class APiAgent( APiBaseAgent ):
         self.agentname = agentname
         self.holon_name = holon_name
         self.holon = holon
+        self.holons = holons
         self._load( fh )
 
         self.flows = []
@@ -44,6 +45,8 @@ class APiAgent( APiBaseAgent ):
         self.output_channel_query_buffer = []
         self.input_env_query_buffer = []
         self.output_env_query_buffer = []
+        self.input_holon_query_buffer = []
+        self.output_holon_query_buffer = []
 
         self.input_channel_servers = {}
         self.output_channel_servers = {}
@@ -756,10 +759,11 @@ class APiAgent( APiBaseAgent ):
                     self.agent.say( 'Message could not be verified. IMPOSTER!!!!!!' )
 
 
-def main( name, address, password, holon, holon_name, token, flows ):
+def main( name, address, password, holon, holon_name, token, flows, holons ):
     flows = json.loads( flows )
+    holons = json.loads( holons )
     flows = [ ( i[ 0 ], i[ 1 ] ) if len(i) == 2 else ( i[ 0 ], i[ 1 ], i[ 2 ] ) for i in flows ]
-    a = APiAgent( name, address, password, holon, holon_name, token, flows )
+    a = APiAgent( name, address, password, holon, holon_name, token, flows, holons )
     
     a.start()
 
@@ -772,7 +776,8 @@ if __name__ == '__main__':
     parser.add_argument( 'holon_name', metavar='HOLON_NAME', type=str, help="Agent's instantiating holon's name" )
     parser.add_argument( 'token', metavar='TOKEN', type=str, help="Agent's security token" )
     parser.add_argument( 'flows', metavar='FLOWS', type=str, help="Agent's communication flows" )
+    parser.add_argument( 'holons', metavar='holons', type=str, help="Agent's holons to communicate with" )
 
     args = parser.parse_args()
 
-    main( args.name, args.address, args.password, args.holon, args.holon_name, args.token, args.flows )
+    main( args.name, args.address, args.password, args.holon, args.holon_name, args.token, args.flows, args.holons )

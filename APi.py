@@ -60,7 +60,7 @@ def read_specification_files_recursively(fl, spec_by_holon = {}):
 
     return spec_by_holon
 
-def generate_namespace():
+def generate_namespaces():
     if len( sys.argv ) > 2:
         print( 'Usage: APi [filename.api]' )
     else:
@@ -84,24 +84,27 @@ if __name__ == '__main__':
     # TESTING
     os.chdir('test')
     
-    ns = generate_namespace()
-    print(ns)
-    
-    # agents = ns.get("agents", [])
-    # channels = ns.get("channels", [])
-    # holons = ns.get("holons", [])
-    # environment = ns.get("environment", [])
-    # execution_plans = ns.get("execution_plans")
+    ns = generate_namespaces()
+    holon_names = list(ns.keys())
+    rs = APiRegistrationService( 'APi-test' )
+    holons_addressbook = {}
+    for holon in holon_names:
+        h1name, h1password = rs.register( holon )
+        holons_addressbook[holon] = {"address": h1name, "password":h1password}
 
-    # print(ns)
+    for holon, namespace in ns.items():
+        agents = namespace.get("agents", [])
+        channels = namespace.get("channels", [])
+        environment = namespace.get("environment", [])
+        execution_plans = namespace.get("execution_plans")        
+        holons = namespace.get("holons", [])
+        holon_addresses = {ch: holons_addressbook[ch]['address'] for ch in holons}
+        
+        creds = holons_addressbook[holon]    
+        h = APiHolon( holon, creds['address'], creds['password'], agents, channels, environment, holon_addresses, execution_plans )
+        h.start()
 
-    # rs = APiRegistrationService( 'APi-test' )
-    # h1name, h1password = rs.register( 'holonko1' )
+    input("Press enter to interrupt")
 
-    # h1 = APiHolon( 'holonko1', h1name, h1password, agents, channels, environment, holons, execution_plans )
-    # h1.start()
-    
-    # input("Press enter to interrupt")
-
-    # spade.quit_spade()
+    spade.quit_spade()
 
