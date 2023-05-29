@@ -32,35 +32,35 @@ class APiBaseChannel( APiBaseAgent ):
         # * -> Done!
 
         
-        # if not self.input or not self.output:
-        self.map = lambda x: x
-        # else:
-        #     if self.input.startswith( 'regex(' ):
-        #         reg = self.input[ 6:-1 ]
-        #         # print( 'RE', reg )
-        #         self.input_re = re.compile( reg )
-        #         self.map = self.map_re
-        #     elif self.input.startswith( 'json(' ):
-        #         self.input_json = self.input[ 5:-1 ]
-        #         self.kb.query( 'use_module(library(http/json))' )
-        #         cp = self.input_json
-        #         replaces = {}
-        #         for var in self.var_re.findall( self.input_json ):
-        #             rpl = self.REPL_STR % var
-        #             replaces[ rpl[ 1:-1 ] ] = var
-        #             cp = cp.replace( var, rpl )
-        #         query = " APIRES = ok, open_string( '%s', S ), json_read_dict( S, X ). " % cp
-        #         res = self.kb.query( query )
-        #         prolog_json = res[ 0 ][ 'X' ]
-        #         for k, v in replaces.items():
-        #             prolog_json = prolog_json.replace( k, 'X' + v[ 1: ] )
+        if not self.input or not self.output:
+            self.map = lambda x: x
+        else:
+            if self.input.startswith( 'regex(' ):
+                reg = self.input[ 6:-1 ]
+                # print( 'RE', reg )
+                self.input_re = re.compile( reg )
+                self.map = self.map_re
+            elif self.input.startswith( 'json(' ):
+                self.input_json = self.input[ 5:-1 ]
+                self.kb.query( 'use_module(library(http/json))' )
+                cp = self.input_json
+                replaces = {}
+                for var in self.var_re.findall( self.input_json ):
+                    rpl = self.REPL_STR % var
+                    replaces[ rpl[ 1:-1 ] ] = var
+                    cp = cp.replace( var, rpl )
+                query = " APIRES = ok, open_string( '%s', S ), json_read_dict( S, X ). " % cp
+                res = self.kb.query( query )
+                prolog_json = res[ 0 ][ 'X' ]
+                for k, v in replaces.items():
+                    prolog_json = prolog_json.replace( k, 'X' + v[ 1: ] )
 
-        #         self.input_json = prolog_json
+                self.input_json = prolog_json
                     
-        #         self.map = self.map_json
-        #     elif self.input.startswith( 'xml( ' ):
-        #         # TODO: Implement XML
-        #         raise NotImplementedError( NIE )            
+                self.map = self.map_json
+            elif self.input.startswith( 'xml( ' ):
+                # TODO: Implement XML
+                raise NotImplementedError( NIE )            
 
     def map( self, data ):
         pass

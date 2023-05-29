@@ -281,7 +281,6 @@ class APiHolon( APiTalkingAgent ):
                     try:
                         if (channel == 'ENVIRONMENT' or channel == self.agent.holonname) and self.agent.environment is not None:
                             address = self.agent.environment[ 'address' ]
-                        # provjera za channel
                         else:
                             address = self.agent.channels[ channel ][ 'address' ]
 
