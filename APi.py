@@ -86,7 +86,7 @@ if __name__ == '__main__':
     
     ns = generate_namespaces()
     holon_names = list(ns.keys())
-    rs = APiRegistrationService( 'APi-test' )
+    rs = APiRegistrationService( 'api-test' ) # should make sure that the name is lowercase
     holons_addressbook = {}
     for holon in holon_names:
         h1name, h1password = rs.register( holon )

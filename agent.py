@@ -677,7 +677,7 @@ class APiAgent( APiBaseAgent ):
                 metadata[ 'performative' ] = 'request_to_input'
                 metadata[ 'reply-with' ] = str( uuid4().hex )
                 metadata[ 'external' ] = 'True'
-                await asyncio.sleep( 15 )
+                await asyncio.sleep( 15 ) # makes sure that we do not start writing to holon before it is started up
                 await self.agent.schedule_message( channel, metadata=metadata )
 
     """
