@@ -44,7 +44,7 @@ class APiChannel( APiBaseChannel ):
 
         # iterating over netcat server clients is blocking, thus we run it in thread
         # that wont block the runtime
-        self.cli_socket = Thread( target=self.get_server_clients, args=(srv,"subscribe") )
+        self.cli_socket = Thread( target=self.get_server_clients, args=(srv, "subscribe", self.protocol) )
         self.cli_socket.start()    
 
 

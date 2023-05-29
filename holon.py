@@ -117,7 +117,7 @@ class APiHolon( APiTalkingAgent ):
         environment = {}
         environment[ 'name' ] = f'{self.holonname}-environment'
         address, password = self.registrar.register( environment[ 'name' ] )
-        environment[ 'cmd' ] = 'python3 ../environment.py "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s"' % ( environment[ 'name' ], address, password, self.address, self.holonname, self.token, json.dumps( ( self.registrar.min_port, self.registrar.max_port ) ), 'tcp', json.dumps( env[ 'input' ] ).replace('"','\\"'), json.dumps( env[ 'output' ] ).replace('"','\\"') )
+        environment[ 'cmd' ] = 'python3 ../environment.py "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s"' % ( environment[ 'name' ], address, password, self.address, self.holonname, self.token, json.dumps( ( self.registrar.min_port, self.registrar.max_port ) ), env[ 'input_protocol' ], env[ 'output_protocol' ], json.dumps( env[ 'input' ] ).replace('"','\\"'), json.dumps( env[ 'output' ] ).replace('"','\\"') )
         environment[ 'address' ] = address
         environment[ 'status' ] = 'setup'
         self.environment = environment

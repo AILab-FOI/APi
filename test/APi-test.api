@@ -50,12 +50,12 @@ start a & b
 // komunikacija s okružjem (drugim holonima ili game engine-ovima)
 
 environment :
-	input1 => regex 'x is (?P<var>[0-9]+)'
-	output1 <= json { 'action': ?act }
+	input1 --> regex 'x is (?P<var>[0-9]+)'
+	output1 <-- json { 'action': ?act }
 
 environment :
-	input1 => regex 'x is (?P<var>[0-9]+)'
-	output1 <= json { 'action': ?act, 'juha':{ ?gaga:[ 1, 2, 3, true, false, null ] } }
+	input1 --> regex 'x is (?P<var>[0-9]+)'
+	output1 <-- json { 'action': ?act, 'juha':{ ?gaga:[ 1, 2, 3, true, false, null ] } }
 
 
 // komentari

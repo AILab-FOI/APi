@@ -33,18 +33,21 @@ class APi( APiListener ):
         pass
 
     # Exit a parse tree produced by APiParser#s_environment.
-    def exitS_environment(self, ctx:APiParser.S_environmentContext):
+    def exitS_environment(self, ctx:APiParser.S_environmentContext):        
         input = None
+        input_protocol = "tcp"
         output = None
-        print(len(self.STACK))
+        output_protocol = "tcp"
         while (len(self.STACK) > 0):
             entry = self.STACK.pop()
             if entry['type'] == "input":
                 input = entry['value']
+                input_protocol = entry['protocol']
             elif entry['type'] == "output":
                 output = entry['value']
+                output_protocol = entry['protocol']
 
-        environment = { "input": input, "output": output }
+        environment = { "input": input, "output": output, "input_protocol": input_protocol, "output_protocol": output_protocol }
         self.ns.add_environment(environment)
 
     # Enter a parse tree produced by APiParser#s_environment_forward.
@@ -53,15 +56,17 @@ class APi( APiListener ):
 
     # Exit a parse tree produced by APiParser#s_environment_forward.
     def exitS_environment_forward(self, ctx:APiParser.S_environment_forwardContext):
-        environment = { "input": None, "output": None }
+        environment = { "input": None, "output": None, "input_protocol": "tcp", "output_protocol": "tcp" }
         self.ns.add_environment(environment)
 
 
 
     # Enter a parse tree produced by APiParser#iflow.
     def enterIflow(self, ctx:APiParser.IflowContext):
+        protocol_symbol = ctx.children[3].getText()
+        protocol = "tcp" if protocol_symbol == '-->' else "udp"
         input = ctx.children[5].getText()
-        self.STACK.append( {"type": "input", "value": input} )
+        self.STACK.append( {"type": "input", "value": input, "protocol": protocol} )
 
     # Exit a parse tree produced by APiParser#iflow.
     def exitIflow(self, ctx:APiParser.IflowContext):
@@ -70,8 +75,10 @@ class APi( APiListener ):
 
     # Enter a parse tree produced by APiParser#oflow.
     def enterOflow(self, ctx:APiParser.OflowContext):
+        protocol_symbol = ctx.children[3].getText()
+        protocol = "tcp" if protocol_symbol == '<--' else "udp"
         output = ctx.children[5].getText()
-        self.STACK.append( {"type": "output", "value": output} )
+        self.STACK.append( {"type": "output", "value": output, "protocol": protocol} )
 
     # Exit a parse tree produced by APiParser#oflow.
     def exitOflow(self, ctx:APiParser.OflowContext):

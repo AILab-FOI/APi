@@ -106,17 +106,17 @@ class APiBaseChannel( APiBaseAgent ):
         # TODO: Implement XML
         raise NotImplementedError( NIE )
 
-    def get_server_clients( self, server, ref_var_name ):
-        if self.protocol == "udp":
+    def get_server_clients( self, server, ref_var_name, protocol ):
+        if protocol == "udp":
             for _, client in server:
                 self.socket_clients[ref_var_name].append( client )
         else:
             for client in server:
                 self.socket_clients[ref_var_name].append( client )
 
-    def get_free_port( self ):
+    def get_free_port( self, protocol ):
         '''Get a free port on the host'''
-        if self.protocol == "tcp":
+        if protocol == "tcp":
             sock = socket.socket( socket.AF_INET, socket.SOCK_STREAM )
         else:
             sock = socket.socket( type=socket.SOCK_DGRAM )
@@ -155,7 +155,7 @@ class APiBaseChannel( APiBaseAgent ):
 
     def get_server( self, protocol ):
         '''Get a NetCat server for sending or receiving'''
-        port =  self.get_free_port()
+        port =  self.get_free_port(protocol)
         host = self.get_ip()
 
         self.say( host, port )
@@ -168,7 +168,7 @@ class APiBaseChannel( APiBaseAgent ):
                 print( f'{protocol} SERVER CONNECTED AT PORT', port )
             except OSError as e:
                 print("Error starting socket server", e, port)
-                port = self.get_free_port()
+                port = self.get_free_port(protocol)
 
         return srv, host, str( port ), protocol
 

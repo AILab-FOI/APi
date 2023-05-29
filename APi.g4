@@ -22,9 +22,9 @@ s_environment : ENVIRONMENT WS ':' NEWLINE ( iflow | oflow )+ ;
 
 s_environment_forward : ENVIRONMENT WS '.' NEWLINE ;
 
-iflow : TAB INPUT WS INPUT_FORMAT WS s_input NEWLINE ;
+iflow : TAB INPUT WS C_SENDS WS s_input NEWLINE ;
 
-oflow : TAB OUTPUT WS OUTPUT_FORMAT WS s_output NEWLINE ;
+oflow : TAB OUTPUT WS E_SENDS WS s_output NEWLINE ;
 
 s_start : START WS pi_expr ;
 
@@ -128,17 +128,19 @@ JSON : 'json' ;
 
 XML : 'xml' ;
 
-INPUT_FORMAT : '=>' ;
-
-OUTPUT_FORMAT : '<=' ;
-
 A_SENDS  : '->' ;
 
 C_SENDS : TCP | UDP ;
 
+E_SENDS : TCP_BW | UDP_BW ;
+
 TCP : '-->' ;
 
 UDP : '*->' ;
+
+TCP_BW : '<--' ;
+
+UDP_BW : '<-*' ;
 
 NIL     : '0' ;
 
