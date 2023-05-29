@@ -16,13 +16,15 @@ import JSON, XMLParser ;
 options { tokenVocab=XMLLexer; }
 
 
-api_program : ( s_import | s_environment | s_channel | s_channel_forward | s_agent | s_start | COMMENT | NEWLINE )*? ;
+api_program : ( s_import | s_environment | s_environment_forward | s_channel | s_channel_forward | s_agent | s_start | COMMENT | NEWLINE )*? ;
 
 s_environment : ENVIRONMENT WS ':' NEWLINE ( iflow | oflow )+ ;
 
-iflow : TAB INPUT WS INPUT_FORMAT WS s_input NEWLINE ;
+s_environment_forward : ENVIRONMENT WS '.' NEWLINE ;
 
-oflow : TAB OUTPUT WS OUTPUT_FORMAT WS s_output NEWLINE ;
+iflow : TAB INPUT WS C_SENDS WS s_input NEWLINE ;
+
+oflow : TAB OUTPUT WS E_SENDS WS s_output NEWLINE ;
 
 s_start : START WS pi_expr ;
 
@@ -40,7 +42,7 @@ arglist : '(' IDENT (WS IDENT)* ')';
 
 aflow : TAB valid_channel WS A_SENDS WS valid_channel NEWLINE ;
 
-valid_channel : IDENT | SELF | NIL ;
+valid_channel : IDENT | SELF | NIL | STDIN | STDOUT | STDERR | VOID ;
 
 s_channel : CHANNEL WS IDENT WS ':' NEWLINE s_channel_spec ;
 
@@ -92,6 +94,14 @@ INPUT : 'input' ;
 
 OUTPUT : 'output' ;
 
+STDOUT : 'stdout' ;
+
+STDERR : 'stderr' ;
+
+STDIN : 'stdin' ;
+
+VOID : 'void' ;
+
 IMPORT : 'import' ;
 
 ENVIRONMENT : 'environment' ;
@@ -118,17 +128,19 @@ JSON : 'json' ;
 
 XML : 'xml' ;
 
-INPUT_FORMAT : '=>' ;
-
-OUTPUT_FORMAT : '<=' ;
-
 A_SENDS  : '->' ;
 
 C_SENDS : TCP | UDP ;
 
+E_SENDS : TCP_BW | UDP_BW ;
+
 TCP : '-->' ;
 
 UDP : '*->' ;
+
+TCP_BW : '<--' ;
+
+UDP_BW : '<-*' ;
 
 NIL     : '0' ;
 

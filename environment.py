@@ -7,9 +7,9 @@ import argparse
 class APiEnvironment( APiBaseChannel ):
     '''Environment agent.'''
 
-    def __init__( self, channelname, name, password, holon, holon_name, token, portrange, protocol, channel_input=None, channel_output=None ):
+    def __init__( self, channelname, name, password, holon, holon_name, token, portrange, input_protocol, output_protocol, input=None, output=None ):
         # revert and pass proper input & output
-        super().__init__( channelname, name, password, holon, token, portrange, None, None  )
+        super().__init__( channelname, name, password, holon, token, portrange, input, output )
         # used for external agents that will communicate with holon / environment
         self.input_attach_servers = []
         self.output_attach_servers = []
@@ -31,17 +31,18 @@ class APiEnvironment( APiBaseChannel ):
         self.inform_msg_template[ 'auth-token' ] = self.auth
 
         self.holon_name = holon_name
-        self.protocol = protocol
+        self.input_protocol = input_protocol
+        self.output_protocol = output_protocol
         # we create one channel each, for tcp & udp communication since agent may request
         # one protocol or another
-        srv, ip, port, protocol = self.get_server( protocol )
+        srv, ip, port, protocol = self.get_server( input_protocol )
         self.input_subscribe_socket_server = {
             "server": srv,
             "ip": ip,
             "port": port,
             "protocol": protocol
         }
-        srv, ip, port, protocol = self.get_server( protocol )
+        srv, ip, port, protocol = self.get_server( output_protocol )
         # used for external agents that will communicate with holon / environment
         self.output_subscribe_socket_server = {
             "server": srv,
@@ -55,16 +56,17 @@ class APiEnvironment( APiBaseChannel ):
 
         # iterating over netcat server clients is blocking, thus we run it in thread
         # that wont block the runtime
-        self.input_subscribe_cli_socket = Thread( target=self.get_server_clients, args=(self.input_subscribe_socket_server['server'], "input_subscribe_socket_clients") )
+        self.input_subscribe_cli_socket = Thread( target=self.get_server_clients, args=(self.input_subscribe_socket_server['server'], "input_subscribe_socket_clients", self.input_protocol) )
         self.input_subscribe_cli_socket.start()            
-        self.output_subscribe_cli_socket = Thread( target=self.get_server_clients, args=(self.output_subscribe_socket_server['server'], "output_subscribe_socket_clients") )
+        self.output_subscribe_cli_socket = Thread( target=self.get_server_clients, args=(self.output_subscribe_socket_server['server'], "output_subscribe_socket_clients", self.output_protocol) )
         self.output_subscribe_cli_socket.start()
 
     def send_to_subscribed_agents( self, sub_type, msg ):
         socket_clients = self.socket_clients['input_subscribe_socket_clients'] if sub_type == "input" else self.socket_clients['output_subscribe_socket_clients']
         s_server = self.input_subscribe_socket_server if sub_type == "input" else self.output_subscribe_socket_server
+        protocol = self.input_protocol if sub_type == "input" else self.output_protocol
 
-        if self.protocol == "udp":
+        if protocol == "udp":
             for client in socket_clients:
                 s_server['server'].respond(msg, client)
         else:
@@ -112,24 +114,24 @@ class APiEnvironment( APiBaseChannel ):
                     if msg.metadata[ 'performative' ] == 'subscribe_to_input':
                         metadata[ 'agent' ] = 'ENV_INPUT'
                         metadata[ 'type' ] = 'input'
-                        _, ip, port, protocol = self.agent.get_subscribe_server( "input", self.agent.protocol )
+                        _, ip, port, protocol = self.agent.get_subscribe_server( "input", self.agent.input_protocol )
                         print( 'ADDED input subscribe server', ip, port )
                     # subscribing to environment output
                     elif msg.metadata[ 'performative' ] == 'subscribe_to_output':
                         metadata[ 'agent' ] = 'ENV_OUTPUT'
                         metadata[ 'type' ] = 'input'
-                        _, ip, port, protocol = self.agent.get_subscribe_server( "output", self.agent.protocol )
+                        _, ip, port, protocol = self.agent.get_subscribe_server( "output", self.agent.output_protocol )
                         print( 'ADDED output subscribe server', ip, port )
                     # attaching to environment output
                     elif msg.metadata[ 'performative' ] == 'request_to_input':
                         metadata[ 'agent' ] = 'ENV_INPUT'
                         metadata[ 'type' ] = 'output'
-                        _, ip, port, protocol = self.agent.get_attach_server( "input", self.agent.protocol )
+                        _, ip, port, protocol = self.agent.get_attach_server( "input", self.agent.input_protocol )
                         print( 'ADDED input attach server', ip, port )
                     elif msg.metadata[ 'performative' ] == 'request_to_output':
                         metadata[ 'agent' ] = 'ENV_OUTPUT'
                         metadata[ 'type' ] = 'output'
-                        _, ip, port, protocol = self.agent.get_attach_server( "output", self.agent.protocol )
+                        _, ip, port, protocol = self.agent.get_attach_server( "output", self.agent.output_protocol )
                         print( 'ADDED output attach server', ip, port )
                     else:
                         self.agent.say( 'Unknown message' )
@@ -158,16 +160,17 @@ class APiEnvironment( APiBaseChannel ):
             super().__init__()
             self.sub_type = sub_type
             self.attach_servers = attach_servers
+            self.protocol = self.agent.input_protocol if sub_type == "input" else self.agent.output_protocol
 
         async def run( self ):
 
             def iter_clients( srv ):
-                if self.agent.protocol == "udp":
+                if self.protocol == "udp":
                     yield srv
                 else:
                     try:
                         c, a = srv.sock.accept()
-                        is_udp = True if self.agent.protocol == "udp" else False
+                        is_udp = True if self.protocol == "udp" else False
                         client = nclib.Netcat( sock=c, server=a, udp=is_udp )
                         yield client
                         for client in srv:
@@ -184,7 +187,7 @@ class APiEnvironment( APiBaseChannel ):
                     for client in iter_clients( srv ):
                         self.agent.say( 'CLIENT', client, srv.addr )
                         # TODO should put in a method instead
-                        if self.agent.protocol == "udp":
+                        if self.protocol == "udp":
                             result = None
                             try:
                                 result, _ = client.sock.recvfrom(1024)
@@ -218,11 +221,11 @@ class APiEnvironment( APiBaseChannel ):
         self.add_behaviour( bofwd )
 
 
-def main( name, address, password, holon, holon_name, token, portrange, protocol, input, output ):
+def main( name, address, password, holon, holon_name, token, portrange, input_protocol, output_protocol, input, output ):
     portrange = json.loads( portrange )
     input = json.loads( input )
     output = json.loads( output )
-    a = APiEnvironment( name, address, password, holon, holon_name, token, portrange, protocol=protocol, channel_input=input, channel_output=output )
+    a = APiEnvironment( name, address, password, holon, holon_name, token, portrange, input_protocol, output_protocol, input, output )
     a.start()
 
 if __name__ == '__main__':
@@ -234,10 +237,11 @@ if __name__ == '__main__':
     parser.add_argument( 'holon_name', metavar='HOLON_NAME', type=str, help="Agent's instantiating holon's name" )
     parser.add_argument( 'token', metavar='TOKEN', type=str, help="Environment's security token" )
     parser.add_argument( 'portrange', metavar='PORTRANGE', type=str, help="Environment's port range" )
-    parser.add_argument( 'protocol', metavar='PROTOCOL', type=str, help="Environment's protocol specification" )
+    parser.add_argument( 'input_protocol', metavar='INPUT_PROTOCOL', type=str, help="Environment's input protocol specification" )
+    parser.add_argument( 'output_protocol', metavar='OUTPUT_PROTOCOL', type=str, help="Environment's output protocol specification" )
     parser.add_argument( 'input', metavar='INPUT', type=str, help="Environment's input specification" )
     parser.add_argument( 'output', metavar='OUTPUT', type=str, help="Environment's output specification" )
     
 
     args = parser.parse_args()
-    main( args.name, args.address, args.password, args.holon, args.holon_name, args.token, args.portrange, args.protocol, args.input, args.output )
+    main( args.name, args.address, args.password, args.holon, args.holon_name, args.token, args.portrange, args.input_protocol, args.output_protocol, args.input, args.output )

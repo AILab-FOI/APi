@@ -10,5 +10,5 @@ start a+
 start (a b) | c 
 start (a b) & c 
 environment : 
-	input => json({'val1':?x}) 
-	output <= json({'val5':?x}) 
+	input --> json({'val1':?x}) 
+	output <-- json({'val5':?x}) 

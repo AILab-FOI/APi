@@ -8,7 +8,7 @@ class APiChannel( APiBaseChannel ):
     '''Channel agent.'''
 
     def __init__( self, channelname, name, password, holon, token, portrange, protocol, channel_input=None, channel_output=None ):
-        super().__init__( channelname, name, password, holon, token, portrange, channel_input, channel_output  )
+        super().__init__( channelname, name, password, holon, token, portrange, channel_input, channel_output )
 
         # TODO we can use a single server for attach instead of multiple
         self.attach_servers = []
@@ -44,7 +44,7 @@ class APiChannel( APiBaseChannel ):
 
         # iterating over netcat server clients is blocking, thus we run it in thread
         # that wont block the runtime
-        self.cli_socket = Thread( target=self.get_server_clients, args=(srv,"subscribe") )
+        self.cli_socket = Thread( target=self.get_server_clients, args=(srv, "subscribe", self.protocol) )
         self.cli_socket.start()    
 
 

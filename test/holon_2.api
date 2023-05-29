@@ -1,5 +1,5 @@
 agent bla_stdin_stdout : 
 	ENV_INPUT -> self 
 environment : 
-	input => json({'val1':?x}) 
-	output <= json({'val5':?x}) 
+	input --> json({'val1':?x}) 
+	output <-- json({'val5':?x}) 
