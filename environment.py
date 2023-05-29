@@ -9,7 +9,7 @@ class APiEnvironment( APiBaseChannel ):
 
     def __init__( self, channelname, name, password, holon, holon_name, token, portrange, protocol, channel_input=None, channel_output=None ):
         # revert and pass proper input & output
-        super().__init__( channelname, name, password, holon, token, portrange, channel_input, channel_output  )
+        super().__init__( channelname, name, password, holon, token, portrange, channel_input, channel_output )
         # used for external agents that will communicate with holon / environment
         self.input_attach_servers = []
         self.output_attach_servers = []

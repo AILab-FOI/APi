@@ -34,8 +34,16 @@ class APi( APiListener ):
 
     # Exit a parse tree produced by APiParser#s_environment.
     def exitS_environment(self, ctx:APiParser.S_environmentContext):
-        output = self.STACK.pop()
-        input = self.STACK.pop()
+        input = None
+        output = None
+        print(len(self.STACK))
+        while (len(self.STACK) > 0):
+            entry = self.STACK.pop()
+            if entry['type'] == "input":
+                input = entry['value']
+            elif entry['type'] == "output":
+                output = entry['value']
+
         environment = { "input": input, "output": output }
         self.ns.add_environment(environment)
 
@@ -53,7 +61,7 @@ class APi( APiListener ):
     # Enter a parse tree produced by APiParser#iflow.
     def enterIflow(self, ctx:APiParser.IflowContext):
         input = ctx.children[5].getText()
-        self.STACK.append( input )
+        self.STACK.append( {"type": "input", "value": input} )
 
     # Exit a parse tree produced by APiParser#iflow.
     def exitIflow(self, ctx:APiParser.IflowContext):
@@ -63,7 +71,7 @@ class APi( APiListener ):
     # Enter a parse tree produced by APiParser#oflow.
     def enterOflow(self, ctx:APiParser.OflowContext):
         output = ctx.children[5].getText()
-        self.STACK.append( output )
+        self.STACK.append( {"type": "output", "value": output} )
 
     # Exit a parse tree produced by APiParser#oflow.
     def exitOflow(self, ctx:APiParser.OflowContext):
