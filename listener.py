@@ -39,6 +39,16 @@ class APi( APiListener ):
         environment = { "input": input, "output": output }
         self.ns.add_environment(environment)
 
+    # Enter a parse tree produced by APiParser#s_environment_forward.
+    def enterS_environment_forward(self, ctx:APiParser.S_environment_forwardContext):
+        pass
+
+    # Exit a parse tree produced by APiParser#s_environment_forward.
+    def exitS_environment_forward(self, ctx:APiParser.S_environment_forwardContext):
+        environment = { "input": None, "output": None }
+        self.ns.add_environment(environment)
+
+
 
     # Enter a parse tree produced by APiParser#iflow.
     def enterIflow(self, ctx:APiParser.IflowContext):

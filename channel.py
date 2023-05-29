@@ -8,7 +8,7 @@ class APiChannel( APiBaseChannel ):
     '''Channel agent.'''
 
     def __init__( self, channelname, name, password, holon, token, portrange, protocol, channel_input=None, channel_output=None ):
-        super().__init__( channelname, name, password, holon, token, portrange, channel_input, channel_output  )
+        super().__init__( channelname, name, password, holon, token, portrange, channel_input, channel_output )
 
         # TODO we can use a single server for attach instead of multiple
         self.attach_servers = []

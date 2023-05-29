@@ -16,9 +16,11 @@ import JSON, XMLParser ;
 options { tokenVocab=XMLLexer; }
 
 
-api_program : ( s_import | s_environment | s_channel | s_channel_forward | s_agent | s_start | COMMENT | NEWLINE )*? ;
+api_program : ( s_import | s_environment | s_environment_forward | s_channel | s_channel_forward | s_agent | s_start | COMMENT | NEWLINE )*? ;
 
 s_environment : ENVIRONMENT WS ':' NEWLINE ( iflow | oflow )+ ;
+
+s_environment_forward : ENVIRONMENT WS '.' NEWLINE ;
 
 iflow : TAB INPUT WS INPUT_FORMAT WS s_input NEWLINE ;
 
@@ -40,7 +42,7 @@ arglist : '(' IDENT (WS IDENT)* ')';
 
 aflow : TAB valid_channel WS A_SENDS WS valid_channel NEWLINE ;
 
-valid_channel : IDENT | SELF | NIL ;
+valid_channel : IDENT | SELF | NIL | STDIN | STDOUT | STDERR | VOID ;
 
 s_channel : CHANNEL WS IDENT WS ':' NEWLINE s_channel_spec ;
 
@@ -91,6 +93,14 @@ s_regex : REGEX '(' STRING ')';
 INPUT : 'input' ;
 
 OUTPUT : 'output' ;
+
+STDOUT : 'stdout' ;
+
+STDERR : 'stderr' ;
+
+STDIN : 'stdin' ;
+
+VOID : 'void' ;
 
 IMPORT : 'import' ;
 

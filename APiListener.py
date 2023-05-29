@@ -1,6 +1,6 @@
-# Generated from APi.g4 by ANTLR 4.12.0
+# Generated from APi.g4 by ANTLR 4.13.0
 from antlr4 import *
-if __name__ is not None and "." in __name__:
+if "." in __name__:
     from .APiParser import APiParser
 else:
     from APiParser import APiParser
@@ -23,6 +23,15 @@ class APiListener(ParseTreeListener):
 
     # Exit a parse tree produced by APiParser#s_environment.
     def exitS_environment(self, ctx:APiParser.S_environmentContext):
+        pass
+
+
+    # Enter a parse tree produced by APiParser#s_environment_forward.
+    def enterS_environment_forward(self, ctx:APiParser.S_environment_forwardContext):
+        pass
+
+    # Exit a parse tree produced by APiParser#s_environment_forward.
+    def exitS_environment_forward(self, ctx:APiParser.S_environment_forwardContext):
         pass
 
 
