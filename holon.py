@@ -9,7 +9,7 @@ from execution_plan import resolve_execution_plan
 class APiHolon( APiTalkingAgent ):
     '''A holon created by an .api file.'''
     '''TODO: Finish holon implementation'''
-    def __init__( self, holonname, name, password, agents, channels, environment, holons, execution_plans ):
+    def __init__( self, holonname, name, password, agents, channels, environment, holons_addressbook, execution_plans ):
         self.token = str( uuid4().hex )
         super().__init__( name, password, str( uuid4().hex ) )
         self.holonname = holonname
@@ -30,9 +30,7 @@ class APiHolon( APiTalkingAgent ):
         for a in agents:
             self.create_agent_types_map( a )
 
-        self.holons = {}
-        for h in holons:
-            self.setup_holon( h )
+        self.holons = holons_addressbook
 
         self.execution_plans = None
         if len(execution_plans) > 0:
@@ -96,7 +94,7 @@ class APiHolon( APiTalkingAgent ):
             flows = self.adjust_flows_by_args(agent[ 'args' ], params, agent[ 'flows' ])
         else:
             flows = agent[ 'flows' ]
-        agent[ 'cmd' ] = 'python3 ../agent.py "%s" "%s" "%s" "%s" "%s" "%s" "%s"' % ( agent[ 'name' ], address, password, self.address, self.holonname, self.token, json.dumps( flows ).replace('"','\\"') )
+        agent[ 'cmd' ] = 'python3 ../agent.py "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s"' % ( agent[ 'name' ], address, password, self.address, self.holonname, self.token, json.dumps( flows ).replace('"','\\"'), json.dumps( self.holons ).replace('"','\\"') )
         agent[ 'address' ] = address
         agent[ 'status' ] = 'setup'
         agent[ 'id' ] = id
@@ -119,7 +117,7 @@ class APiHolon( APiTalkingAgent ):
         environment = {}
         environment[ 'name' ] = f'{self.holonname}-environment'
         address, password = self.registrar.register( environment[ 'name' ] )
-        environment[ 'cmd' ] = 'python3 ../environment.py "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s"' % ( environment[ 'name' ], address, password, self.address, self.token, json.dumps( ( self.registrar.min_port, self.registrar.max_port ) ), 'tcp', json.dumps( env[ 'input' ] ).replace('"','\\"'), json.dumps( env[ 'output' ] ).replace('"','\\"') )
+        environment[ 'cmd' ] = 'python3 ../environment.py "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s"' % ( environment[ 'name' ], address, password, self.address, self.holonname, self.token, json.dumps( ( self.registrar.min_port, self.registrar.max_port ) ), 'tcp', json.dumps( env[ 'input' ] ).replace('"','\\"'), json.dumps( env[ 'output' ] ).replace('"','\\"') )
         environment[ 'address' ] = address
         environment[ 'status' ] = 'setup'
         self.environment = environment
@@ -149,10 +147,7 @@ class APiHolon( APiTalkingAgent ):
         return sp.Popen( cmd, stderr=sp.STDOUT, start_new_session=True )
 
     def agent_finished( self, a_id, plan_id, status ):
-        print("finished", a_id, plan_id, status)
-        print("finished", a_id, plan_id, status)
-        print("finished", a_id, plan_id, status)
-        print("finished", a_id, plan_id, status)
+        pass
 
     def start_dependant_agent_thread( self, a_id, plan_id, cmd ):
         proc = sp.Popen( cmd, start_new_session=True )
@@ -284,11 +279,11 @@ class APiHolon( APiTalkingAgent ):
                     metadata[ 'agent' ] = channel
 
                     try:
-                        if self.agent.environment and channel == 'ENVIRONMENT':
-                            metadata[ 'agent' ] = 'ENVIRONMENT'
+                        if (channel == 'ENVIRONMENT' or channel == self.agent.holonname) and self.agent.environment is not None:
                             address = self.agent.environment[ 'address' ]
-                        else:                            
+                        else:
                             address = self.agent.channels[ channel ][ 'address' ]
+
                         self.agent.say( 'Found channel', channel, 'address is', address )
 
                         metadata[ 'success' ] = 'true'

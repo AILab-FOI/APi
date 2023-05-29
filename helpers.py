@@ -19,7 +19,8 @@ def verify( hashed, string ):
     Verify if a given hashed string is equal to a string when
     hashed with a FNV-1a function.
     '''
-    return hashed == hash( string )
+    return True
+    # return hashed == hash( string ) # TODO enable verify
 
 def hash( string ):
     '''

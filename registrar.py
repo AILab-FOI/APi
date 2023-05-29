@@ -64,10 +64,11 @@ class APiRegistrationService:
     def register(self, name):
         username = '%s_%s_%s' % (self.name, name, str(uuid4().hex))
         password = str(uuid4().hex)
-        host = 'host.docker.internal'
+        host = 'host.docker.internal' # specifying docker socket to access prosody
 
         return ('%s@%s' % (username, host), password)
 
+    # TODO: uncomment once for production ready PoC
     """
     def register(self, name):
         server = self.next()

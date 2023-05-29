@@ -7,7 +7,7 @@ import argparse
 class APiEnvironment( APiBaseChannel ):
     '''Environment agent.'''
 
-    def __init__( self, channelname, name, password, holon, token, portrange, protocol, channel_input=None, channel_output=None ):
+    def __init__( self, channelname, name, password, holon, holon_name, token, portrange, protocol, channel_input=None, channel_output=None ):
         # revert and pass proper input & output
         super().__init__( channelname, name, password, holon, token, portrange, None, None  )
         # used for external agents that will communicate with holon / environment
@@ -30,6 +30,7 @@ class APiEnvironment( APiBaseChannel ):
         self.inform_msg_template[ 'type' ] = 'environment'
         self.inform_msg_template[ 'auth-token' ] = self.auth
 
+        self.holon_name = holon_name
         self.protocol = protocol
         # we create one channel each, for tcp & udp communication since agent may request
         # one protocol or another
@@ -137,6 +138,9 @@ class APiEnvironment( APiBaseChannel ):
                         metadata[ 'reason' ] = 'unknown-message'
                         await self.agent.schedule_message( str( msg.sender ), metadata=metadata )
 
+                    if msg.metadata.get('external', "") == "True":
+                        metadata[ 'agent' ] = self.agent.holon_name
+
                     metadata[ 'server' ] = ip
                     metadata[ 'port' ] = port
                     metadata[ 'protocol' ] = protocol
@@ -214,11 +218,11 @@ class APiEnvironment( APiBaseChannel ):
         self.add_behaviour( bofwd )
 
 
-def main( name, address, password, holon, token, portrange, protocol, input, output ):
+def main( name, address, password, holon, holon_name, token, portrange, protocol, input, output ):
     portrange = json.loads( portrange )
     input = json.loads( input )
     output = json.loads( output )
-    a = APiEnvironment( name, address, password, holon, token, portrange, protocol=protocol, channel_input=input, channel_output=output )
+    a = APiEnvironment( name, address, password, holon, holon_name, token, portrange, protocol=protocol, channel_input=input, channel_output=output )
     a.start()
 
 if __name__ == '__main__':
@@ -227,6 +231,7 @@ if __name__ == '__main__':
     parser.add_argument( 'address', metavar='ADDRESS', type=str, help="Environment's XMPP/JID address" )
     parser.add_argument( 'password', metavar='PWD', type=str, help="Environment's XMPP/JID password" )
     parser.add_argument( 'holon', metavar='HOLON', type=str, help="Environment's instantiating holon's XMPP/JID address" )
+    parser.add_argument( 'holon_name', metavar='HOLON_NAME', type=str, help="Agent's instantiating holon's name" )
     parser.add_argument( 'token', metavar='TOKEN', type=str, help="Environment's security token" )
     parser.add_argument( 'portrange', metavar='PORTRANGE', type=str, help="Environment's port range" )
     parser.add_argument( 'protocol', metavar='PROTOCOL', type=str, help="Environment's protocol specification" )
@@ -235,4 +240,4 @@ if __name__ == '__main__':
     
 
     args = parser.parse_args()
-    main( args.name, args.address, args.password, args.holon, args.token, args.portrange, args.protocol, args.input, args.output )
+    main( args.name, args.address, args.password, args.holon, args.holon_name, args.token, args.portrange, args.protocol, args.input, args.output )
