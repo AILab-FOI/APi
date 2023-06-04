@@ -10,3 +10,4 @@ COPY requirements.txt requirements.txt
 RUN pip3 install -r requirements.txt
 RUN pip3 install git+https://github.com/AILab-FOI/pyxf
 RUN pip3 install --upgrade aiohttp_jinja2
+RUN pip3 install spade==3.2.3
