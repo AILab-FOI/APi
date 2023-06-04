@@ -107,10 +107,6 @@ class APiTalkingAgent( Agent ):
         bt = self.Terminate()
         self.add_behaviour( bt, bt_template )
 
-    def on_end(self):
-        print("in")
-        # sys.exit(1)
-
     async def schedule_message( self, to, body='', metadata={} ):
         # TODO: See if this can be done in a more elegant way ...
         msg = Message( to=to, body=body, metadata=deepcopy( metadata ) )
@@ -296,7 +292,7 @@ class APiBaseAgent( APiTalkingAgent ):
         stdin - STDIN file handle
         '''
         send = True
-        while send and self.input_ended == False:
+        while send:
             if not self.BUFFER:
                 await asyncio.sleep( 0.1 )
             else:
@@ -818,21 +814,15 @@ class APiBaseAgent( APiTalkingAgent ):
         while not self.all_setup():
             await asyncio.sleep( 0.1 )
 
-        print("prosoo")
-
         proc = await asyncio.create_subprocess_shell(
             cmd,
             stderr=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE )
 
-        print("hey")
-
         await asyncio.gather(
             self.read_stderr( proc.stderr ),
             self.read_stdout( proc.stdout ) )
     
-        print("holjan")
-
         try:
             pid = proc.pid
             pr = psutil.Process( pid )
@@ -1435,7 +1425,6 @@ class APiBaseAgent( APiTalkingAgent ):
             self.nc_udp = udp != ''
             self.input = self.input_nc
             
-            print("ever here?")
             self.ncstdout_thread = Thread( target=asyncio.run, args=( self.input_ncstdout_run( self.cmd ), ) )
             #self.ncstdout_thread.start()
 
