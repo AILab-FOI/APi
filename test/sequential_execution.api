@@ -1,0 +1,4 @@
+channel c . 
+agent bla_file_stdout(kanal) : 
+	self -> kanal 
+start bla_file_stdout(c) bla_file_stdout(c)
