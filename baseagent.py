@@ -103,6 +103,10 @@ class APiTalkingAgent( Agent ):
         st = self.Stop()
         self.add_behaviour( st, st_template )
 
+        bt_template = Template( metadata={ "ontology": "APiScheduling", "action": "finish", "performative": "confirm" } )
+        bt = self.Terminate()
+        self.add_behaviour( bt, bt_template )
+
     async def schedule_message( self, to, body='', metadata={} ):
         # TODO: See if this can be done in a more elegant way ...
         msg = Message( to=to, body=body, metadata=deepcopy( metadata ) )
@@ -129,12 +133,18 @@ class APiTalkingAgent( Agent ):
                     metadata[ 'status' ] = 'stopped'
                     await self.agent.schedule_message( self.agent.holon, metadata=metadata )
 
-                    # or should we use super().stop()?
-                    self.kill()
+                    await self.agent.stop()
                 else:
                     self.agent.say( 'Message could not be verified. IMPOSTER!!!!!!' )
 
-
+    class Terminate( CyclicBehaviour ):
+        async def run(self):
+            msg = await self.receive( timeout=1 )
+            if msg:
+                if self.agent.verify( msg ):
+                    await self.agent.stop()
+                else:
+                    self.agent.say( 'Message could not be verified. IMPOSTER!!!!!!' )
 
 class APiBaseAgent( APiTalkingAgent ):
     '''
@@ -158,7 +168,6 @@ class APiBaseAgent( APiTalkingAgent ):
                 await self.output_callback( buf.decode() )
         await self.output_callback( self.output_delimiter ) # TODO: End of output? Verify this
 
-
     async def read_stderr( self, stderr ):
         '''
         Coroutine reading STDERR and calling callback method.
@@ -166,12 +175,12 @@ class APiBaseAgent( APiTalkingAgent ):
         '''
         while True:
             buf = await stderr.readline()
+
             if not buf:
                 break
             
             if self.output_type == 'STDERR':
                 await self.output_callback( buf.decode() )
-
     
     async def read_file( self, file_path ):
         '''
@@ -365,8 +374,6 @@ class APiBaseAgent( APiTalkingAgent ):
 
         if data == self.input_end:
             self.service_quit( 'Got end delimiter on STDIN, quitting!' )
-
-
     
     async def input_stdin_run( self, cmd ):
         while not self.all_setup():
@@ -806,6 +813,7 @@ class APiBaseAgent( APiTalkingAgent ):
     async def input_ncstdout_run( self, cmd ):
         while not self.all_setup():
             await asyncio.sleep( 0.1 )
+
         proc = await asyncio.create_subprocess_shell(
             cmd,
             stderr=asyncio.subprocess.PIPE,
@@ -814,7 +822,7 @@ class APiBaseAgent( APiTalkingAgent ):
         await asyncio.gather(
             self.read_stderr( proc.stderr ),
             self.read_stdout( proc.stdout ) )
-    
+
         try:
             pid = proc.pid
             pr = psutil.Process( pid )
@@ -937,6 +945,9 @@ class APiBaseAgent( APiTalkingAgent ):
         '''
         Start main thread dealing with service input/output.
         '''
+        service_quit_thread = Thread( target=asyncio.run, args=( self.service_quit_run( ), ) )
+        service_quit_thread.start()
+
         try:
             if self.stdinout_thread:
                 self.stdinout_thread.start()
@@ -1003,7 +1014,8 @@ class APiBaseAgent( APiTalkingAgent ):
         except Exception as e:
             pass
 
-    async def service_quit( self, msg='' ):
+
+    def service_quit( self, msg='' ):
         '''
         Service quitting and clean up method. Joins all threads and
         kills all running processes (services).
@@ -1013,6 +1025,10 @@ class APiBaseAgent( APiTalkingAgent ):
         
         self.say( msg ) # firstly need to clean up and finish all threads
         self.input_ended = True
+
+    async def service_quit_run( self ):
+        while not self.input_ended:
+            await asyncio.sleep( 0.1 )
         
         try:
             if self.stdinout_thread:
@@ -1195,6 +1211,7 @@ class APiBaseAgent( APiTalkingAgent ):
             self.input = self.input_stdin
 
             self.BUFFER = []
+
             self.stdinfile_thread = Thread( target=asyncio.run, args=( self.input_stdinfile_run( self.cmd, fl ), ) )
             #self.stdinfile_thread.start()
         elif self.input_type == 'STDIN' and self.output_type[ :4 ] == 'HTTP':

@@ -2,6 +2,7 @@
 from baseagent import *
 import json
 import argparse
+import time
 
 class APiAgent( APiBaseAgent ):
     '''Service wrapper agent.'''
@@ -183,6 +184,14 @@ class APiAgent( APiBaseAgent ):
             self.wsws_thread = None
             self.wsnc_thread = None
             self.wsncrec_thread = None
+
+            # NC threads
+            self.ncstdout_thread = None
+            self.ncfile_thread = None
+            self.nchttp_thread = None
+            self.ncws_thread = None
+            self.ncnc_thread = None
+            self.ncncrec_thread = None
             
             try:
                 self.process_descriptor()
@@ -225,7 +234,7 @@ class APiAgent( APiBaseAgent ):
                     print( 'TRYING TO RECONNECT' )
                     srv[ 'socket' ] = nclib.Netcat( ( srv[ 'server' ], srv[ 'port' ] ), udp=is_udp )
         if data == self.output_delimiter: # TODO: Verify this
-            await self.service_quit( 'End of output' )
+            self.service_quit( 'End of output' )
                     
 
     def subscribe_to_channel( self, channel, channel_type ):
@@ -696,12 +705,12 @@ class APiAgent( APiBaseAgent ):
 
                         if msg.metadata[ 'performative' ] == 'refuse':
                             self.agent.say( 'Error getting channel address due to ' + msg.metadata[ 'reson' ] )
-                            self.kill()
+                            await self.agent.stop()
                         elif msg.metadata[ 'success' ] == 'true':
                             self.agent.address_book[ msg.metadata[ 'agent' ] ] = channel
                         else:
                             self.agent.say( 'Error getting channel address. Channel unknown to holon.' )
-                            self.kill()
+                            await self.agent.stop()
                             
                     except KeyError:
                         self.agent.say( 'I have no memory of this message (%s). (awkward Gandalf look)' % msg.metadata[ 'in-reply-to' ] )           
@@ -722,7 +731,7 @@ class APiAgent( APiBaseAgent ):
                         self.agent.input_ack.remove( msg.metadata[ 'in-reply-to' ] )
                         if msg.metadata[ 'performative' ] == 'refuse':
                             self.agent.say( 'Error connecting to channel address due to ' + msg.metadata[ 'reason' ] )
-                            self.kill()
+                            await self.agent.stop()
                         else:
                             channel = msg.metadata[ 'agent' ]
                             is_udp = msg.metadata[ 'protocol' ] == 'udp'
@@ -761,7 +770,7 @@ class APiAgent( APiBaseAgent ):
                         self.agent.input_ack.remove( msg.metadata[ 'in-reply-to' ] )
                         if msg.metadata[ 'performative' ] == 'refuse':
                             self.agent.say( 'Error connecting to channel address due to ' + msg.metadata[ 'reason' ] )
-                            self.kill() # TODO: Inform holon about failure
+                            await self.agent.stop() # TODO: Inform holon about failure
                         else:
                             channel = msg.metadata[ 'agent' ]
                             is_udp = msg.metadata['protocol'] == 'udp'
@@ -831,6 +840,15 @@ def main( name, address, password, holon, holon_name, token, flows, holons_addre
     a = APiAgent( name, address, password, holon, holon_name, token, flows, holons_address_book )
     
     a.start()
+
+    # is_alive() might return false on first check, as agent won't be yet starter
+    # thus there is is_init_set flag which will ensure that we wait for is_alive() to
+    # return true at least once before we would even expect is_alive() to return truthy false
+    is_init_set = False
+    while a.is_alive() or not is_init_set:
+        if a.is_alive():
+            is_init_set = True
+        time.sleep(1)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser( description='APi agent.')
