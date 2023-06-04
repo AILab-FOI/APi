@@ -822,7 +822,7 @@ class APiBaseAgent( APiTalkingAgent ):
         await asyncio.gather(
             self.read_stderr( proc.stderr ),
             self.read_stdout( proc.stdout ) )
-    
+
         try:
             pid = proc.pid
             pr = psutil.Process( pid )
