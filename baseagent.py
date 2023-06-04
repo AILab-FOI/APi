@@ -159,6 +159,7 @@ class APiBaseAgent( APiTalkingAgent ):
         Coroutine reading STDOUT and calling callback method.
         stdout - STDOUT file handle
         '''
+        # while True and self.input_ended == False: # might need to verify if this is helpful or not
         while True:
             buf =  await stdout.readline() 
             if not buf:
@@ -173,6 +174,7 @@ class APiBaseAgent( APiTalkingAgent ):
         Coroutine reading STDERR and calling callback method.
         stderr - STDERR file handle
         '''
+        # while True and self.input_ended == False: # might need to verify if this is helpful or not
         while True:
             buf = await stderr.readline()
 
@@ -190,6 +192,7 @@ class APiBaseAgent( APiTalkingAgent ):
         while not self.all_setup():
             await asyncio.sleep( 0.1 )
         file_empty = True
+        # while file_empty and self.input_ended == False: # might need to verify if this is helpful or not
         while file_empty:
             async with aiofiles.open( file_path, mode='r' ) as f:
                 async for line in f:
@@ -203,6 +206,7 @@ class APiBaseAgent( APiTalkingAgent ):
         url - URL to be read from
         '''
         not_available = True
+        # while not_available and self.input_ended == False: # might need to verify if this is helpful or not
         while not_available:
             try:
                 async with aiohttp.ClientSession() as session:
@@ -225,6 +229,7 @@ class APiBaseAgent( APiTalkingAgent ):
         '''
         error = True
         not_timeout = True
+        # while error and self.input_ended == False: # might need to verify if this is helpful or not
         while error:
             try:
                 #print( '(read_ws) CONNECTING TO', url )
@@ -261,6 +266,7 @@ class APiBaseAgent( APiTalkingAgent ):
         udp=False - should NETCAT use UDP (if false, default is TCP)
         '''
         not_available = True
+        # while not_available and self.input_ended == False: # might need to verify if this is helpful or not
         while not_available:
             try:
                 ncclient = nclib.Netcat( ( host, port ), udp=udp, raise_eof=True )
@@ -292,6 +298,7 @@ class APiBaseAgent( APiTalkingAgent ):
         stdin - STDIN file handle
         '''
         send = True
+        # while send and self.input_ended == False: # might need to verify if this is helpful or not
         while send:
             if not self.BUFFER:
                 await asyncio.sleep( 0.1 )

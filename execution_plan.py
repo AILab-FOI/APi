@@ -13,9 +13,9 @@ def get_agent_operator(remaining_sequence):
 Getting the next agent from the current one (so that we know which are dependant ones)
 """
 def get_next_agent(remaining_sequence):
-    if len(remaining_sequence) > 0 and remaining_sequence[0].isalpha():
+    if len(remaining_sequence) > 0 and remaining_sequence[0].isidentifier():
         return remaining_sequence[0]
-    elif len(remaining_sequence) > 1 and remaining_sequence[1].isalpha():
+    elif len(remaining_sequence) > 1 and remaining_sequence[1].isidentifier():
         return remaining_sequence[1]
 
     return None
@@ -171,6 +171,8 @@ def resolve_execution_plan(execution_plan):
 
     return {"id": uuid4().hex, "plan": agents, "initial_agents_to_run": initial_agents, "started": False}
 
+# execution_plans = ['bla_file_stdout bla_file_stdout']
+# execution_plans = ['bla_file_stdout(c) bla_file_stdout(c)']
 # execution_plans = ['a(c a) a(b r) | (b c)']
 # execution_plans_resolved = [resolve_execution_plan(plan) for plan in execution_plans]
 # print(execution_plans_resolved)

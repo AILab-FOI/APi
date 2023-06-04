@@ -146,8 +146,41 @@ class APiHolon( APiTalkingAgent ):
     def start_basic_agent_thread( self, cmd ):
         return sp.Popen( cmd, stderr=sp.STDOUT, start_new_session=True )
 
-    def agent_finished( self, a_id, plan_id, status ):
-        pass
+    def agent_finished( self, a_id, plan_id, status_code ):
+        plan = None
+        for p in self.execution_plans:
+            if p['id'] == plan_id:
+                plan = p
+        agent_exec = plan['plan'].get(a_id, None)
+
+        # may not be needed, unless errored
+        self.agents[ a_id ][ 'status' ] = 'stopped'
+
+        operator = agent_exec['operator']
+        succeeding_agent_id = None
+        # start agent again
+        if operator == "+":
+            succeeding_agent_id = a_id
+        # start new agent if current errors
+        elif operator == "!":
+            if status_code != 0:
+                succeeding_agent_id = agent_exec['succeeding_agent_id']
+        # start new agent if current succeeds
+        elif operator == "&":
+            if status_code == 0:
+                succeeding_agent_id = agent_exec['succeeding_agent_id']
+        # no matter the status, start the new agent
+        elif operator == None:
+            succeeding_agent_id = agent_exec['succeeding_agent_id']
+
+        succeeding_agent = None
+        if succeeding_agent_id is not None:
+            for a in self.agents.values():
+                if a[ 'id' ] == succeeding_agent_id:
+                    succeeding_agent = a
+
+        if succeeding_agent is not None:
+            self.run_agent_thread( succeeding_agent, 'dependant')
 
     def start_dependant_agent_thread( self, a_id, plan_id, cmd ):
         proc = sp.Popen( cmd, start_new_session=True )
@@ -186,28 +219,28 @@ class APiHolon( APiTalkingAgent ):
             for a_type in self.agent_types.keys():                
                 self.setup_agent( a_type )
 
-    def start_initial_agents( self ):
-        def run( a, start_type ):
-            cmd = shlex.split( a[ 'cmd' ] )
-            a_id = a[ 'id' ]
-            plan_id = a[ 'plan_id' ]
-            self.say( 'Running agent:', a.get('name') )
-            if start_type == "dependant":
-                a[ 'instance' ] = Thread( target=self.start_dependant_agent_thread, args=( a_id, plan_id, cmd ) )
-            else:
-                a[ 'instance' ] = Thread( target=self.start_basic_agent_thread, args=( cmd, ) )
-            a[ 'instance' ].start()
-            a[ 'status' ] = 'started'
+    def run_agent_thread( self, a, start_type ):
+        cmd = shlex.split( a[ 'cmd' ] )
+        a_id = a[ 'id' ]
+        plan_id = a[ 'plan_id' ]
+        self.say( 'Running agent:', a.get('name') )
+        if start_type == "dependant":
+            a[ 'instance' ] = Thread( target=self.start_dependant_agent_thread, args=( a_id, plan_id, cmd ) )
+        else:
+            a[ 'instance' ] = Thread( target=self.start_basic_agent_thread, args=( cmd, ) )
+        a[ 'instance' ].start()
+        a[ 'status' ] = 'started'
 
+    def start_initial_agents( self ):
         if not self.execution_plans == None:
             for execution_plan in self.execution_plans:
                 i_agent_ids = execution_plan[ 'initial_agents_to_run' ]
                 for a in self.agents.values():
                     if a[ 'id' ] in i_agent_ids:
-                        run( a, 'dependant' )
+                        self.run_agent_thread( a, 'dependant' )
         else:
             for a in self.agents.values():
-                run( a, 'basic' )
+                self.run_agent_thread( a, 'basic' )
 
     async def stop( self ):
         self.say( '(Stop Agents) Stopping all agents & channels!' )
@@ -376,12 +409,24 @@ class APiHolon( APiTalkingAgent ):
             # wait until we have some agents running
             if len(self.agent.agents.values()) == 0:
                 return
+            
+            metadata = deepcopy( self.agent.request_message_template )
+            metadata[ 'action' ] = 'start'
 
             if not self.agent.execution_plans is None:
                 for plan in self.agent.execution_plans:
+                    # starting dependant agents once the execution plan has already been started (and initial agents launched)
                     if plan[ 'started' ]:
+                        for p_a_id in plan['plan'].keys():
+                            a = self.agent.agents[p_a_id]
+                            if a['status'] == 'ready':
+                                self.agent.agents[ p_a_id ][ 'status' ] = 'executing'
+                                await self.agent.schedule_message( a[ 'address' ], metadata=metadata )
+                        
+                        # no need to check flow below, as it deals with inital agents, which are already started
                         continue
 
+                    # starting initial agents
                     i_agent_ids = plan[ 'initial_agents_to_run' ]
 
                     all_ready = True
@@ -391,10 +436,9 @@ class APiHolon( APiTalkingAgent ):
                             
                     if all_ready:
                         self.agent.say( '(Execute plan) All agents ready, scheduling them for start!' )
-                        metadata = deepcopy( self.agent.request_message_template )
-                        metadata[ 'action' ] = 'start'
                         for agent in self.agent.agents.values():
                             if agent[ 'id' ] in i_agent_ids:
+                                self.agent.agents[ agent['id'] ][ 'status' ] = 'executing'
                                 await self.agent.schedule_message( agent[ 'address' ], metadata=metadata )
                         plan[ 'started' ] = True
                 
@@ -407,9 +451,8 @@ class APiHolon( APiTalkingAgent ):
                         break
                 if all_ready and not self.agent.all_started:
                     self.agent.say( '(Execute plan) All agents ready, scheduling them for start!' )
-                    metadata = deepcopy( self.agent.request_message_template )
-                    metadata[ 'action' ] = 'start'
                     for agent in self.agent.agents.values():
+                        self.agent.agents[ agent['id'] ][ 'status' ] = 'executing'
                         await self.agent.schedule_message( agent[ 'address' ], metadata=metadata )
                     self.agent.all_started = True
 

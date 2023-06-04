@@ -1,0 +1,8 @@
+channel c . 
+channel d . 
+channel e . 
+agent bla_stdin_stdout(kanal) : 
+	kanal -> self 
+start bla_stdin_stdout(c) 
+start bla_stdin_stdout(d) 
+start bla_stdin_stdout(e) 
