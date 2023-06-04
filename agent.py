@@ -705,12 +705,12 @@ class APiAgent( APiBaseAgent ):
 
                         if msg.metadata[ 'performative' ] == 'refuse':
                             self.agent.say( 'Error getting channel address due to ' + msg.metadata[ 'reson' ] )
-                            self.kill()
+                            await self.agent.stop()
                         elif msg.metadata[ 'success' ] == 'true':
                             self.agent.address_book[ msg.metadata[ 'agent' ] ] = channel
                         else:
                             self.agent.say( 'Error getting channel address. Channel unknown to holon.' )
-                            self.kill()
+                            await self.agent.stop()
                             
                     except KeyError:
                         self.agent.say( 'I have no memory of this message (%s). (awkward Gandalf look)' % msg.metadata[ 'in-reply-to' ] )           
@@ -731,7 +731,7 @@ class APiAgent( APiBaseAgent ):
                         self.agent.input_ack.remove( msg.metadata[ 'in-reply-to' ] )
                         if msg.metadata[ 'performative' ] == 'refuse':
                             self.agent.say( 'Error connecting to channel address due to ' + msg.metadata[ 'reason' ] )
-                            self.kill()
+                            await self.agent.stop()
                         else:
                             channel = msg.metadata[ 'agent' ]
                             is_udp = msg.metadata[ 'protocol' ] == 'udp'
@@ -770,7 +770,7 @@ class APiAgent( APiBaseAgent ):
                         self.agent.input_ack.remove( msg.metadata[ 'in-reply-to' ] )
                         if msg.metadata[ 'performative' ] == 'refuse':
                             self.agent.say( 'Error connecting to channel address due to ' + msg.metadata[ 'reason' ] )
-                            self.kill() # TODO: Inform holon about failure
+                            await self.agent.stop() # TODO: Inform holon about failure
                         else:
                             channel = msg.metadata[ 'agent' ]
                             is_udp = msg.metadata['protocol'] == 'udp'

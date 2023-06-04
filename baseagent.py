@@ -137,8 +137,7 @@ class APiTalkingAgent( Agent ):
                     metadata[ 'status' ] = 'stopped'
                     await self.agent.schedule_message( self.agent.holon, metadata=metadata )
 
-                    # or should we use super().stop()?
-                    self.kill()
+                    await self.agent.stop()
                 else:
                     self.agent.say( 'Message could not be verified. IMPOSTER!!!!!!' )
 
@@ -146,9 +145,7 @@ class APiTalkingAgent( Agent ):
         async def run(self):
             msg = await self.receive( timeout=1 )
             if msg:
-                print("to je to")
                 if self.agent.verify( msg ):
-                    print("ina")
                     await self.agent.stop()
                 else:
                     self.agent.say( 'Message could not be verified. IMPOSTER!!!!!!' )
