@@ -40,7 +40,7 @@ class APiHolon( APiTalkingAgent ):
         self.all_agents_listening = False
 
         self.all_started = False # Indicate if execution plan has been started already
-        self.start_env_and_channels_all()
+        self.start_env_and_channels()
 
         self.query_message_template = {}
         self.query_message_template[ 'performative' ] = 'inform-ref'
@@ -152,11 +152,11 @@ class APiHolon( APiTalkingAgent ):
     def start_dependant_agent_thread( self, a_id, plan_id, cmd ):
         proc = sp.Popen( cmd, start_new_session=True )
         proc.communicate()
-        return_code = proc.returncode
+        return_code = proc.returncode        
 
         self.agent_finished(a_id, plan_id, return_code)
 
-    def start_env_and_channels_all( self ):
+    def start_env_and_channels( self ):
         if not self.environment == None:
             cmd = shlex.split( self.environment[ 'cmd' ] )
             self.say('Running environment:', self.environment.get('name'))
@@ -436,6 +436,7 @@ class APiHolon( APiTalkingAgent ):
                     
                     # sending message to ack that agent has stopped, so they can terminate
                     metadata = deepcopy( self.agent.confirm_message_template )
+                    metadata[ 'action' ] = 'finish'
                     metadata[ 'in-reply-to' ] = msg.metadata[ 'reply-with' ]
 
                     await self.agent.schedule_message( str( msg.sender ), metadata=metadata )

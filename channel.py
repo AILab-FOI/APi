@@ -2,6 +2,7 @@
 
 from basechannel import *
 import json
+import time
 import argparse
 
 class APiChannel( APiBaseChannel ):
@@ -181,7 +182,17 @@ def main( name, address, password, holon, token, portrange, protocol, input, out
     input = json.loads( input )
     output = json.loads( output )
     a = APiChannel( name, address, password, holon, token, portrange, protocol=protocol, channel_input=input, channel_output=output )
+    
     a.start()
+
+    # is_alive() might return false on first check, as agent won't be yet starter
+    # thus there is is_init_set flag which will ensure that we wait for is_alive() to
+    # return true at least once before we would even expect is_alive() to return truthy false
+    is_init_set = False
+    while a.is_alive() or not is_init_set:
+        if a.is_alive():
+            is_init_set = True
+        time.sleep(1)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser( description='APi agent.')

@@ -2,6 +2,7 @@
 from baseagent import *
 import json
 import argparse
+import time
 
 class APiAgent( APiBaseAgent ):
     '''Service wrapper agent.'''
@@ -183,6 +184,14 @@ class APiAgent( APiBaseAgent ):
             self.wsws_thread = None
             self.wsnc_thread = None
             self.wsncrec_thread = None
+
+            # NC threads
+            self.ncstdout_thread = None
+            self.ncfile_thread = None
+            self.nchttp_thread = None
+            self.ncws_thread = None
+            self.ncnc_thread = None
+            self.ncncrec_thread = None
             
             try:
                 self.process_descriptor()
@@ -225,7 +234,7 @@ class APiAgent( APiBaseAgent ):
                     print( 'TRYING TO RECONNECT' )
                     srv[ 'socket' ] = nclib.Netcat( ( srv[ 'server' ], srv[ 'port' ] ), udp=is_udp )
         if data == self.output_delimiter: # TODO: Verify this
-            await self.service_quit( 'End of output' )
+            self.service_quit( 'End of output' )
                     
 
     def subscribe_to_channel( self, channel, channel_type ):
@@ -831,6 +840,15 @@ def main( name, address, password, holon, holon_name, token, flows, holons_addre
     a = APiAgent( name, address, password, holon, holon_name, token, flows, holons_address_book )
     
     a.start()
+
+    # is_alive() might return false on first check, as agent won't be yet starter
+    # thus there is is_init_set flag which will ensure that we wait for is_alive() to
+    # return true at least once before we would even expect is_alive() to return truthy false
+    is_init_set = False
+    while a.is_alive() or not is_init_set:
+        if a.is_alive():
+            is_init_set = True
+        time.sleep(1)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser( description='APi agent.')
