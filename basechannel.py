@@ -31,13 +31,6 @@ class APiBaseChannel( APiBaseAgent ):
         #
         # * -> Done!
 
-        # self.input = 'regex((?P<act>.*))' # works
-        self.input = 'json({"data": ?var})'
-
-        # self.output = "json({'action':?act,'history':?act})" # works
-        # self.output = 'xml(<Abc test="?act" />)' # works
-        self.output = 'random string ?var' # works
-
         if not self.input or not self.output:
             self.map = lambda x: x
         else:
