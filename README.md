@@ -33,3 +33,15 @@ Run the following steps to start up the dockerized environment:
 2. `docker exec -ti api /bin/bash` -- to bash into the python3 environment
 3. From inside the bash shell: `python3 APi.py basic.api` -- in order to run the application with the communication flows specification file
 4. To view live prosody logs, which might be helpful as they preview connections, run: `docker logs -f --tail 10 prosody`
+
+## Running Docker containers inside the container
+
+APi allows for running agents as Docker containers among other types (Unix & Kubernetes). This is achieved by having the root service (api service) having Docker installed inside. Additionally, the Docker socket is passed as volume to the root service, which essentially means that the container has access to Docker on the host machine. That means that if the dockerized APi containers starts up new Docker container, these new containers will be treated as siblings to the APi container.
+
+Within this setup, there is an example on how to run APi that starts up dockerized agent. Below are steps needed to be able to run the agent.
+
+1. Positionate to `docker` directory which will be used to build a new image that will contain a file to be read
+2. Run `docker build -t api_docker_example .` which will build the image
+3. Run APi as following `python3 APi.py docker.api` -- it is a specificaiton that uses the dockerized agent
+
+Similarily, you can create your own docker container, which communicates via STDINT / STDOUT and use it.
