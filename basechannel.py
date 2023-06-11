@@ -31,7 +31,13 @@ class APiBaseChannel( APiBaseAgent ):
         #
         # * -> Done!
 
-        
+        # self.input = 'regex((?P<act>.*))' # works
+        self.input = 'json({"data": ?var})'
+
+        # self.output = "json({'action':?act,'history':?act})" # works
+        # self.output = 'xml(<Abc test="?act" />)' # works
+        self.output = 'random string ?var' # works
+
         if not self.input or not self.output:
             self.map = lambda x: x
         else:
@@ -70,7 +76,7 @@ class APiBaseChannel( APiBaseAgent ):
         match = self.input_re.match( data )
         print( 'MAPRE MATCH', match )
         vars = self.input_re.groupindex.keys()
-        print( 'MAPRE MATCH', vars )
+        print( 'MAPRE MATCH2', vars )
         results = {}
         if not match:
             return ''
@@ -88,19 +94,28 @@ class APiBaseChannel( APiBaseAgent ):
     def format_output( self, res ):
         output = self.output
 
+        if self.output.startswith("json("):
+            output = self.output[ 5:-1 ]
+        elif self.output.startswith("xml("):
+            output = self.output[ 4:-1 ]
+
         for var, val in res[ 0 ].items():
             output = output.replace( '?' + var[ 1: ], val )
+
         return output
             
     def map_json( self, data ):
-        query = " APIRES = ok, open_string( '%s', S ), json_read_dict( S, X ). " % data
-        res = self.kb.query( query )
-        prolog_json = res[ 0 ][ 'X' ]
-        query = " APIRES = ok, X = %s, Y = %s, X = Y. " % ( prolog_json, self.input_json )
-        res = self.kb.query( query )
-        del res[ 0 ][ 'X' ]
-        del res[ 0 ][ 'Y' ]
-        return self.format_output( res )
+        try:
+            query = " APIRES = ok, open_string( '%s', S ), json_read_dict( S, X ). " % data
+            res = self.kb.query( query )
+            prolog_json = res[ 0 ][ 'X' ]
+            query = " APIRES = ok, X = %s, Y = %s, X = Y. " % ( prolog_json, self.input_json )
+            res = self.kb.query( query )
+            del res[ 0 ][ 'X' ]
+            del res[ 0 ][ 'Y' ]
+            return self.format_output( res )
+        except:
+            return ""
 
     def map_xml( self, data ):
         # TODO: Implement XML
