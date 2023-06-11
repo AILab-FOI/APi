@@ -139,10 +139,17 @@ class APiAgent( APiBaseAgent ):
         except Exception as e:
             err = 'Agent definition file is invalid.\n' + str( e )
             raise APiAgentDefinitionError( err )
-
+        
         if self.type == 'unix':
-            # Initialize attributes to be used later
             self.cmd = self.descriptor[ 'agent' ][ 'start' ]
+        elif self.type == 'docker':
+            name = self.descriptor[ 'agent' ][ 'name' ]
+            cmd = self.descriptor[ 'agent' ][ 'start' ]
+            
+            self.cmd = f'docker run -a stdin -a stdout -i -t {name} {cmd}'
+
+        if self.type in ['unix', 'docker']:
+            # Initialize attributes to be used later
             self.input_file_path = None
             self.input_delimiter = None
             self.http_proc = None
@@ -198,11 +205,6 @@ class APiAgent( APiBaseAgent ):
             except Exception as e:
                 err = 'Agent definition file is invalid.\n' + str( e )
                 raise APiAgentDefinitionError( err )
-
-
-            
-        elif self.type == 'docker':
-            raise NotImplementedError( NIE )
         elif self.type == 'kubernetes':
             raise NotImplementedError( NIE )
         else:
