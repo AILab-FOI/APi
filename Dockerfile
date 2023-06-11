@@ -6,6 +6,8 @@ RUN apt-get update && \
     apt-get -y install gcc mono-mcs git swi-prolog docker.io && \
     rm -rf /var/lib/apt/lists/*
 
+RUN curl -sSL https://get.docker.com/ | sh
+
 COPY requirements.txt requirements.txt
 RUN pip3 install -r requirements.txt
 RUN pip3 install git+https://github.com/AILab-FOI/pyxf
