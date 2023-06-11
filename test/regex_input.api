@@ -1,0 +1,7 @@
+channel c : 
+	regex(?P<act>.*) -> json({"action": ?act, "history": ?act})
+agent bla_stdin_stdout : 
+	c -> self 
+agent bla_file_stdout : 
+	self -> c 
+start bla_stdin_stdout | bla_file_stdout 
