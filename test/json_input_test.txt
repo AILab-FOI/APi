@@ -3,4 +3,3 @@
 {"data": 12}
 {"data": 133}
 {"data": 73}
-closing
