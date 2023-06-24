@@ -104,7 +104,7 @@ class APiHolon( APiTalkingAgent ):
     def setup_channel( self, channel ):
         address, password = self.registrar.register( channel[ 'name' ] )
         self.say( 'Registering channel', channel[ 'name' ] )
-        channel[ 'cmd' ] = 'python3 ../channel.py "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s"' % ( channel[ 'name' ], address, password, self.address, self.token, json.dumps( ( self.registrar.min_port, self.registrar.max_port ) ), channel[ 'protocol' ], json.dumps( channel[ 'input' ] ).replace('"','\\"'), json.dumps( channel[ 'output' ] ).replace('"','\\"') )
+        channel[ 'cmd' ] = 'python3 ../channel.py "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s"' % ( channel[ 'name' ], address, password, self.address, self.token, json.dumps( ( self.registrar.min_port, self.registrar.max_port ) ), channel[ 'protocol' ], json.dumps( channel[ 'input' ] ).replace('"','\""'), json.dumps( channel[ 'output' ] ).replace('"','\""') )
         channel[ 'address' ] = address
         channel[ 'status' ] = 'setup'
         self.channels[ channel[ 'name' ] ] = channel
@@ -117,7 +117,7 @@ class APiHolon( APiTalkingAgent ):
         environment = {}
         environment[ 'name' ] = f'{self.holonname}-environment'
         address, password = self.registrar.register( environment[ 'name' ] )
-        environment[ 'cmd' ] = 'python3 ../environment.py "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s"' % ( environment[ 'name' ], address, password, self.address, self.holonname, self.token, json.dumps( ( self.registrar.min_port, self.registrar.max_port ) ), env[ 'input_protocol' ], env[ 'output_protocol' ], json.dumps( env[ 'input' ] ).replace('"','\\"'), json.dumps( env[ 'output' ] ).replace('"','\\"') )
+        environment[ 'cmd' ] = 'python3 ../environment.py "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s"' % ( environment[ 'name' ], address, password, self.address, self.holonname, self.token, json.dumps( ( self.registrar.min_port, self.registrar.max_port ) ), env[ 'input_protocol' ], env[ 'output_protocol' ], json.dumps( env[ 'input' ] ).replace('"','\""'), json.dumps( env[ 'output' ] ).replace('"','\""') )
         environment[ 'address' ] = address
         environment[ 'status' ] = 'setup'
         self.environment = environment
