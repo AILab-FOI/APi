@@ -157,12 +157,9 @@ class APiChannel( APiBaseChannel ):
                         self.agent.say( 'RESULT', result, srv.addr )
                         if result:
                             self.agent.say( 'MAPPING RESULT', result.decode(), srv.addr )
-                            print("dosla", result)
-                            print("dosla", result.decode())
                             msg = self.agent.map( result.decode() )
                             self.agent.say( 'MSG', msg, srv.addr )                        
 
-                            print("posla", msg)
                             self.agent.send_to_subscribed_agents( msg.encode() )
 
                     

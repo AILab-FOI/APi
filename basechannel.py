@@ -83,7 +83,7 @@ class APiBaseChannel( APiBaseAgent ):
         match = self.input_re.match( data )
         print( 'MAPRE MATCH', match )
         vars = self.input_re.groupindex.keys()
-        print( 'MAPRE MATCH2', vars )
+        print( 'MAPRE MATCH', vars )
         results = {}
         if not match:
             return ''
