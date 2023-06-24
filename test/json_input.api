@@ -1,5 +1,5 @@
 channel c : 
-	json({"data": ?var}) --> xml(<Abc test="?var" />)
+	json({"data": ?var}) --> xml(<Abc test="?var" />) 
 agent bla_stdin_stdout : 
 	c -> self 
 agent json_file_stdout : 
