@@ -36,6 +36,7 @@ def stdin( host, port ):
                  break
              inp = input()
              if inp == "exit":
+                 s.send( inp.encode() )
                  s.shutdown( 2 )    # 0 = done receiving, 1 = done sending, 2 = both
                  s.close()
                  break

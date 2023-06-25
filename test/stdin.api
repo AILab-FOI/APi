@@ -1,0 +1,3 @@
+channel c . 
+agent bla_stdin_stdout : 
+	STDIN -> self 

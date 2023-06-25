@@ -24,6 +24,12 @@ class APiAgent( APiBaseAgent ):
             raise APiIOError( err )
         super().__init__( name, password, token )
         
+        self.shell_ip_stdin = None
+        self.shell_port_stdin = None
+        self.shell_ip_stdout = None
+        self.shell_port_stdout = None
+        self.shell_buffer = []
+
         self.agentname = agentname
         self.holon_name = holon_name
         self.holon = holon
@@ -101,12 +107,6 @@ class APiAgent( APiBaseAgent ):
                 print( 'Not implemented for', i )
 
         self.input_ended = False
-
-        self.shell_ip_stdin = None
-        self.shell_port_stdin = None
-        self.shell_ip_stdout = None
-        self.shell_port_stdout = None
-        self.shell_buffer = []
 
     def _load( self, fh ):
         '''
@@ -247,10 +247,7 @@ class APiAgent( APiBaseAgent ):
         # <name> -> gets instructions from channel on how
         #           to connect (via Netcat)
         if channel_type == 'input':
-            if channel == 'NIL':
-                err = 'Input cannot be 0 (NIL)'
-                raise APiChannelDefinitionError( err )
-            elif channel == 'VOID':
+            if channel == 'VOID':
                 err = 'Input cannot be VOID'
                 raise APiChannelDefinitionError( err )
             elif channel == 'STDOUT':
@@ -269,16 +266,13 @@ class APiAgent( APiBaseAgent ):
                 self.say( 'Adding input channel', channel )
                 self.input_channel_query_buffer.append( channel )
         elif channel_type == 'output':
-            if channel == 'NIL':
-                # TODO: stop agent
-                raise NotImplementedError( NIE )
-            elif channel == 'VOID':
+            if channel == 'VOID':
                 # TODO: send to /dev/null (i.e. do nothing )
                 raise NotImplementedError( NIE )
             elif channel == 'STDOUT':
-                self.start_shell_client( print_stdout=True )
+                self.start_shell_client( await_stdin=False, print_stdout=True )
             elif channel == 'STDERR':
-                self.start_shell_client( print_stderr=False )
+                self.start_shell_client( await_stdin=False, print_stdout=False, print_stderr=True )
             elif channel == 'STDIN':
                 err = 'Output cannot be STDIN'
                 raise APiChannelDefinitionError( err )
@@ -317,12 +311,13 @@ class APiAgent( APiBaseAgent ):
         threads = []
 
         error = False
+        prev_inp = None
         while True:
             try:
                 if self.prompt and not error:
                     self.shell_client_stdin.send( self.prompt.encode() )
                 inp = self.shell_client_stdin.recv( BUFFER_SIZE ).decode()
-                if inp == "exit":
+                if inp == "exit" or (inp == prev_inp and inp == ""):
                     self.shell_client_stdin.close()
                     self.shell_socket_stdin.close()
                     break
@@ -335,7 +330,8 @@ class APiAgent( APiBaseAgent ):
                     t = Thread( target=self.input, args=( inp, ) )
                     t.start()
                     threads.append( t )
-                error = False                                
+                error = False
+                prev_inp = inp
             except Exception as e:
                 error = True
                 sleep( 0.1 )
@@ -362,6 +358,7 @@ class APiAgent( APiBaseAgent ):
         self.shell_client_stdout.settimeout( 0.1 )
 
         error = False
+        print(self.agentname)
         while True:
             try:
                 while self.shell_buffer:
@@ -436,13 +433,14 @@ class APiAgent( APiBaseAgent ):
             else:
                 err = 'No input and not output specified!'
                 raise APiShellInitError( err )
-            cmd = 'dtach -A %s ./../APishc.py %s %d' % ( self.dtach_session, self.shell_ip, self.shell_port )
+            cmd = 'dtach -A %s ../APishc.py %s %d' % ( self.dtach_session, self.shell_ip, self.shell_port )
             if await_stdin:
                 cmd += ' --input'
             elif print_stdout:
                 cmd += ' --output'
             elif print_stderr:
                 cmd += ' --error'
+
             self.shell_client_proc = pexpect.spawn( cmd )
 
             def output_filter( s ):
