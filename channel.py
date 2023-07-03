@@ -179,8 +179,9 @@ class APiChannel( APiBaseChannel ):
 
 def main( name, address, password, holon, token, portrange, protocol, input, output ):
     portrange = json.loads( portrange )
-    input = json.loads( input )
-    output = json.loads( output )
+    input = None if input == "null" else input
+    output = None if output == "null" else output
+
     a = APiChannel( name, address, password, holon, token, portrange, protocol=protocol, channel_input=input, channel_output=output )
     
     a.start()
@@ -206,6 +207,5 @@ if __name__ == '__main__':
     parser.add_argument( 'input', metavar='INPUT', type=str, help="Channel's input specification" )
     parser.add_argument( 'output', metavar='OUTPUT', type=str, help="Channel's output specification" )
     
-
     args = parser.parse_args()
     main( args.name, args.address, args.password, args.holon, args.token, args.portrange, args.protocol, args.input, args.output )

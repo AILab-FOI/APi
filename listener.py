@@ -168,10 +168,15 @@ class APi( APiListener ):
     def exitS_channel(self, ctx:APiParser.S_channelContext):
         channel_name = ctx.children[ 2 ].getText()
         input, protocol_symbol, output = self.STACK.pop()
+        
+        # TODO: should be handled by parser instead
+        if input.startswith("xml("):
+            input = input[:4] + input[5:]
+            input = input[0:-2] + ')'
+
         protocol = "tcp" if protocol_symbol == '-->' else "udp"
         channel = { 'name': channel_name, 'input': input, 'output': output, 'protocol': protocol }
         self.ns.add_channel(channel)
-
 
     # Enter a parse tree produced by APiParser#s_channel_forward.
     def enterS_channel_forward(self, ctx:APiParser.S_channel_forwardContext):

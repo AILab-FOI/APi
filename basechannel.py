@@ -3,6 +3,7 @@
 from baseagent import *
 import json
 import argparse
+import xmltodict
 
 class APiBaseChannel( APiBaseAgent ):
     REPL_STR = '"$$$API_THIS_IS_VARIABLE_%s$$$"'
@@ -31,8 +32,7 @@ class APiBaseChannel( APiBaseAgent ):
         #
         # * -> Done!
 
-        
-        if not self.input or not self.output:
+        if self.input is None or self.output is None:
             self.map = lambda x: x
         else:
             if self.input.startswith( 'regex(' ):
@@ -58,9 +58,22 @@ class APiBaseChannel( APiBaseAgent ):
                 self.input_json = prolog_json
                     
                 self.map = self.map_json
-            elif self.input.startswith( 'xml( ' ):
-                # TODO: Implement XML
-                raise NotImplementedError( NIE )            
+            elif self.input.startswith( 'xml(' ):
+                self.input_xml = self.input[ 4:-1 ]
+                cp = self.input_xml
+                replaces = {}
+                for var in self.var_re.findall( self.input_xml ):
+                    rpl = self.REPL_STR % var
+                    replaces[ rpl[ 1:-1 ] ] = var
+                    cp = cp.replace( var, rpl )            
+
+                for k, v in replaces.items():
+                    input_xml = cp.replace( k, 'X' + v[ 1: ] )
+
+                input_xml = xmltodict.parse(input_xml)
+                self.input_xml = str(input_xml).replace(" ", "").replace("'", "").replace("@", "")
+
+                self.map = self.map_xml
 
     def map( self, data ):
         pass
@@ -88,23 +101,42 @@ class APiBaseChannel( APiBaseAgent ):
     def format_output( self, res ):
         output = self.output
 
+        if self.output.startswith("json("):
+            output = self.output[ 5:-1 ]
+        elif self.output.startswith("xml("):
+            output = self.output[ 4:-1 ]
+
         for var, val in res[ 0 ].items():
             output = output.replace( '?' + var[ 1: ], val )
+
         return output
             
     def map_json( self, data ):
-        query = " APIRES = ok, open_string( '%s', S ), json_read_dict( S, X ). " % data
-        res = self.kb.query( query )
-        prolog_json = res[ 0 ][ 'X' ]
-        query = " APIRES = ok, X = %s, Y = %s, X = Y. " % ( prolog_json, self.input_json )
-        res = self.kb.query( query )
-        del res[ 0 ][ 'X' ]
-        del res[ 0 ][ 'Y' ]
-        return self.format_output( res )
+        try:
+            query = " APIRES = ok, open_string( '%s', S ), json_read_dict( S, X ). " % data
+            res = self.kb.query( query )
+            prolog_json = res[ 0 ][ 'X' ]
+            query = " APIRES = ok, X = %s, Y = %s, X = Y. " % ( prolog_json, self.input_json )
+            res = self.kb.query( query )
+            del res[ 0 ][ 'X' ]
+            del res[ 0 ][ 'Y' ]
+            return self.format_output( res )
+        except:
+            return ""
 
     def map_xml( self, data ):
-        # TODO: Implement XML
-        raise NotImplementedError( NIE )
+        try:
+            data = xmltodict.parse(data)
+            data = str(data).replace(" ", "").replace("'", "").replace("@", "")
+            
+            query = " APIRES = ok, X = %s, Y = %s, X = Y. " % ( data, self.input_xml )
+            res = self.kb.query( query )
+
+            del res[ 0 ][ 'X' ]
+            del res[ 0 ][ 'Y' ]
+            return self.format_output( res )
+        except:
+            return ""
 
     def get_server_clients( self, server, ref_var_name, protocol ):
         if protocol == "udp":

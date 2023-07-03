@@ -1,0 +1,7 @@
+channel c : 
+	xml("<Abc test=?var />") --> json({"data": ?var}) # TODO: should not require brackets for XML 
+agent bla_stdin_stdout : 
+	c -> self 
+agent xml_file_stdout : 
+	self -> c 
+start bla_stdin_stdout | xml_file_stdout 

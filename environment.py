@@ -224,8 +224,8 @@ class APiEnvironment( APiBaseChannel ):
 
 def main( name, address, password, holon, holon_name, token, portrange, input_protocol, output_protocol, input, output ):
     portrange = json.loads( portrange )
-    input = json.loads( input )
-    output = json.loads( output )
+    input = None if input == "null" else input
+    output = None if output == "null" else output
     a = APiEnvironment( name, address, password, holon, holon_name, token, portrange, input_protocol, output_protocol, input, output )
     a.start()
 

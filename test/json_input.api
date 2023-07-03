@@ -1,0 +1,7 @@
+channel c : 
+	json({"data": ?var}) --> xml(<Abc test="?var" />) 
+agent bla_stdin_stdout : 
+	c -> self 
+agent json_file_stdout : 
+	self -> c 
+start bla_stdin_stdout | json_file_stdout 
