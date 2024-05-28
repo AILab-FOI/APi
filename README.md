@@ -45,3 +45,5 @@ Within this setup, there is an example on how to run APi that starts up dockeriz
 3. Run APi as following `python3 APi.py docker.api` -- it is a specificaiton that uses the dockerized agent
 
 Similarily, you can create your own docker container, which communicates via STDINT / STDOUT and use it.
+
+This work has been supported in full by the Croatian Science Foundation under the project number [IP-2019-04-5824](http://dragon.foi.hr:8888/ohai4games).
