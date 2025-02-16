@@ -6,7 +6,7 @@ agent:
    leave it blank if you do not
    feel like writing a good
    description.
- type: unix # docker, kubernetes-pod 
+ type: unix # docker, kubernetes
  start: ncat -l -p 3816 | ./stdin_server.py
  input:
   type: NETCAT localhost:3816 #  STDIN ; FILE <filepath> ; HTTP <url> (make sure to include trailing / if needed) ; WS <url> ; NETCAT <host>:<port>[:<udp>]

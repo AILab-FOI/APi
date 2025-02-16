@@ -6,7 +6,7 @@ agent:
    leave it blank if you do not
    feel like writing a good
    description.
- type: unix # docker, kubernetes-pod 
+ type: unix # docker, kubernetes
  start: cat ./inputs/input_test.txt | grep --line-buffered uhu > output_test.txt
  input:
   type: FILE ./inputs/input_test.txt #  STDIN ; FILE <filepath> ; HTTP <address>:<port>/<url> ; WS <address>:<port> ; NETCAT <cmd>

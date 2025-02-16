@@ -26,7 +26,7 @@ Within this setup, there is an example on how to run APi that starts up dockeriz
 
 1. Positionate to `docker` directory which will be used to build a new image that will contain a file to be read
 2. Run `docker build -t api_docker_example .` which will build the image
-3. Run APi as following `poetry run python3 src/main.py docker.api` -- it is a specificaiton that uses the dockerized agent
+3. Run APi as with unix approach `poetry run python3 src/main.py docker.api` -- it is a specificaiton that uses the dockerized agent
 
 Similarily, you can create your own docker container, which communicates via STDINT / STDOUT and use it.
 

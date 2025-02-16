@@ -203,8 +203,19 @@ class APiAgent(APiBaseWrapperAgent):
             cmd = self.descriptor["agent"]["start"]
 
             self.cmd = f"docker run -a stdin -a stdout -i -t {name} {cmd}"
+        elif self.type == "kubernetes":
+            name = self.descriptor["agent"]["name"]
+            cmd = self.descriptor["agent"]["start"]
 
-        if self.type in ["unix", "docker"]:
+            self.cmd = (
+                f"kubectl run {name} "
+                f"--rm -it "
+                f"--restart=Never "
+                f"--image={name} "
+                f"--command -- {cmd}"
+            )
+
+        if self.type in ["unix", "docker", "kubernetes"]:
             # Initialize attributes to be used later
             self.input_file_path = None
             self.input_delimiter = None
@@ -261,8 +272,6 @@ class APiAgent(APiBaseWrapperAgent):
             except Exception as e:
                 err = "Agent definition file is invalid.\n" + str(e)
                 raise APiAgentDefinitionError(err)
-        elif self.type == "kubernetes":
-            raise NotImplementedError(NIE)
         else:
             err = "Invalid agent type: %s" % self.type
             raise APiAgentDefinitionError(err)

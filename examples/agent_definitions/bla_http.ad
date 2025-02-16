@@ -6,7 +6,7 @@ agent:
    leave it blank if you do not
    feel like writing a good
    description.
- type: unix # docker, kubernetes-pod 
+ type: unix # docker, kubernetes
  start: ./agents/echo_server.py
  input:
   type: HTTP http://0.0.0.0:2709/ #  STDIN ; FILE <filepath> ; HTTP <url> (make sure to include trailing / if needed) ; WS <url> ; NETCAT <cmd>
