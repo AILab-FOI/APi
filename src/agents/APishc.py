@@ -67,8 +67,7 @@ def out(host, port, write_error=False):
                 break
         except Exception as e:
             sleep(0.1)
-            print(e)
-            print(e.errno)
+            print("Error in out", e)
             if e.errno == 107:  # Agent disconnected
                 print("Error, agent has disconnected!")
                 break

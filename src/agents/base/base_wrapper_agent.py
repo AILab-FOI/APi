@@ -958,6 +958,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             if self.ncncrec_thread:
                 self.ncncrec_thread.start()
         except Exception as e:
+            print("Error starting threads", e)
             pass
 
     def service_quit(self, msg=""):
@@ -1504,6 +1505,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
                     )
                     error = False
                 except Exception as e:
+                    print("Error creating nc client", e)
                     sleep(0.1)
 
         elif self.input_type[:6] == "NETCAT" and self.output_type[:2] == "WS":
@@ -1529,6 +1531,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
                     )
                     error = False
                 except Exception as e:
+                    print("Error creating nc client", e)
                     sleep(0.1)
 
         elif self.input_type[:6] == "NETCAT" and self.output_type[:6] == "NETCAT":
@@ -1557,6 +1560,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
                         )
                         error = False
                     except Exception as e:
+                        print("Error creating nc client", e)
                         sleep(0.1)
 
             else:
@@ -1575,6 +1579,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
 
                         error = False
                     except Exception as e:
+                        print("Error creating nc client", e)
                         sleep(0.1)
 
                 self.ncncrec_thread = Thread(

@@ -106,6 +106,7 @@ class APiHolon(APiTalkingAgent):
     def setup_agent(self, agent_type, id=None, plan_id=None, params=None):
         if not id:
             id = uuid4().hex
+
         agent = deepcopy(self.agent_types[agent_type])
         self.say("Registering agent", agent["name"])
         address, password = self.registrar.register(agent["name"])
@@ -137,10 +138,6 @@ class APiHolon(APiTalkingAgent):
     def setup_channel(self, channel):
         address, password = self.registrar.register(channel["name"])
         self.say("Registering channel", channel["name"])
-
-        import os
-
-        print(os.listdir("."))
 
         # NOTE: This should be updated if channel.py is moved around
         channel["cmd"] = (
