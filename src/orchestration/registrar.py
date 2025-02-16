@@ -1,4 +1,4 @@
-from src.utils.helpers import cycle
+from itertools import cycle
 from src.utils.errors import APiIOError, APiHolonConfigurationError
 from src.config.settings import settings
 
@@ -28,7 +28,10 @@ class APiRegistrationService:
         self.mas_name = mas_name
 
         try:
-            fh = open(_CONFIG_FILE_NAME_TEMPLATE.format(file_name=mas_name))
+            fh = open(
+                "mas_configuration/"
+                + _CONFIG_FILE_NAME_TEMPLATE.format(file_name=mas_name)
+            )
         except IOError as e:
             raise APiIOError(
                 "Missing holon configuration file or permission issue.\n" + str(e)

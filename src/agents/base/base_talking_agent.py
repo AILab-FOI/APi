@@ -1,5 +1,5 @@
-from src.utils.helpers import *
-from debug import *
+from src.utils.helpers import verify, hash
+from typing import Optional
 
 from spade.agent import Agent
 from spade.behaviour import CyclicBehaviour
@@ -21,13 +21,28 @@ import websockets
 import nclib
 import os
 from time import sleep
-from itertools import tee, cycle
 from uuid import uuid4
 import subprocess as sp
 import shlex
 import psutil
 from threading import Thread
 from copy import deepcopy
+from src.utils.errors import (
+    APiCommunicationError,
+    APiCallbackException,
+    APiAgentDefinitionError,
+)
+from src.utils.constants import (
+    file_re,
+    http_re,
+    ws_re,
+    netcat_re,
+    delimiter_re,
+    time_re,
+    size_re,
+    regex_re,
+    NIE,
+)
 
 
 class APiTalkingAgent(Agent):
@@ -35,7 +50,7 @@ class APiTalkingAgent(Agent):
     Base agent that implements logic for communication with other SPADE agents.
     """
 
-    def __init__(self, name: str, password: str, token: str | None = None):
+    def __init__(self, name: str, password: str, token: Optional[str] = None):
         super().__init__(name, password)
 
         self.token = token
@@ -62,12 +77,7 @@ class APiTalkingAgent(Agent):
         self.LOG = logging.getLogger("APiAgent")
 
     def say(self, *msg):
-        if TALK:
-            """
-            out = [ '%s:' % self.name ]
-            out += [ i for i in msg ]
-            self.LOG.info( out )"""
-            # print( '%s:' % self.name, *msg )
+        pass
 
     def verify(self, msg):
         return verify(msg.metadata["auth-token"], str(msg.sender.bare()) + self.token)
@@ -210,6 +220,7 @@ class APiBaseAgent(APiTalkingAgent):
                             await self.output_callback(r)
                 not_available = False
             except Exception as e:
+                print(f"Error connecting to url {str(e)}")
                 await asyncio.sleep(0.2)
 
     async def read_ws(self, url):
@@ -244,7 +255,8 @@ class APiBaseAgent(APiTalkingAgent):
             except Exception as e:
                 try:
                     assert e.errno == 111
-                except:
+                except Exception as e:
+                    print(f"Error connecting to websocket {str(e)}")
                     error = False
 
                 await asyncio.sleep(0.2)
@@ -263,6 +275,7 @@ class APiBaseAgent(APiTalkingAgent):
                 ncclient = nclib.Netcat((host, port), udp=udp, raise_eof=True)
                 not_available = False
             except Exception as e:
+                print(f"Error connecting to netcat {str(e)}")
                 sleep(0.2)
 
         error = False
@@ -281,6 +294,7 @@ class APiBaseAgent(APiTalkingAgent):
                 elif self.input_ended:
                     raise Exception("Done")
             except Exception as e:
+                print(f"Error reading from netcat {str(e)}")
                 error = True
 
     async def write_stdin(self, stdin):
@@ -306,6 +320,7 @@ class APiBaseAgent(APiTalkingAgent):
                         await stdin.drain()
                         await asyncio.sleep(0.1)
                     except ConnectionResetError as e:
+                        print(f"Error writing to stdin {str(e)}")
                         self.service_quit("STDIN connection reset, quitting!")
                         break
         stdin.close()
@@ -411,8 +426,8 @@ class APiBaseAgent(APiTalkingAgent):
             for proc in pr.children(recursive=True):
                 proc.kill()
             pr.kill()
-        except:
-            pass
+        except Exception as e:
+            print(f"Error inputting stdin http {str(e)}")
 
     async def input_stdinws_run(self, cmd, url):
         while not self.all_setup():
@@ -432,8 +447,8 @@ class APiBaseAgent(APiTalkingAgent):
             for proc in pr.children(recursive=True):
                 proc.kill()
             pr.kill()
-        except:
-            pass
+        except Exception as e:
+            print(f"Error inputting stdin websocket {str(e)}")
 
     async def input_stdinnc_run(self, cmd, host, port, udp):
         while not self.all_setup():
@@ -453,13 +468,13 @@ class APiBaseAgent(APiTalkingAgent):
             for proc in pr.children(recursive=True):
                 proc.kill()
             pr.kill()
-        except:
-            pass
+        except Exception as e:
+            print(f"Error inputting stdin netcat {str(e)}")
 
     async def input_filefile_run(self, cmd, file_path):
         while not self.all_setup():
             await asyncio.sleep(0.1)
-        proc = await asyncio.create_subprocess_shell(cmd, stdin=asyncio.subprocess.PIPE)
+        await asyncio.create_subprocess_shell(cmd, stdin=asyncio.subprocess.PIPE)
 
         await asyncio.gather(self.read_file(file_path))
 
@@ -481,8 +496,8 @@ class APiBaseAgent(APiTalkingAgent):
             for proc in pr.children(recursive=True):
                 proc.kill()
             pr.kill()
-        except:
-            pass
+        except Exception as e:
+            print(f"Error inputting file http {str(e)}")
 
     async def input_filews_run(self, cmd, file_path, url):
         while not self.all_setup():
@@ -502,8 +517,8 @@ class APiBaseAgent(APiTalkingAgent):
             for proc in pr.children(recursive=True):
                 proc.kill()
             pr.kill()
-        except:
-            pass
+        except Exception as e:
+            print(f"Error inputting file websocket {str(e)}")
 
     async def input_filenc_run(self, cmd, file_path):
         while not self.all_setup():
@@ -523,7 +538,7 @@ class APiBaseAgent(APiTalkingAgent):
                 proc.kill()
             pr.kill()
         except Exception as e:
-            pass
+            print(f"Error inputting file netcat {str(e)}")
 
     async def input_httpstdout_run(self, cmd):
         while not self.all_setup():
@@ -542,8 +557,8 @@ class APiBaseAgent(APiTalkingAgent):
             for proc in pr.children(recursive=True):
                 proc.kill()
             pr.kill()
-        except:
-            pass
+        except Exception as e:
+            print(f"Error inputting http stdout {str(e)}")
 
     async def input_httphttp_run(self, cmd, url):
         while not self.all_setup():
@@ -563,8 +578,8 @@ class APiBaseAgent(APiTalkingAgent):
             for proc in pr.children(recursive=True):
                 proc.kill()
             pr.kill()
-        except:
-            pass
+        except Exception as e:
+            print(f"Error inputting http http {str(e)}")
 
     async def input_httpfile_run(self, cmd, file_path):
         while not self.all_setup():
@@ -579,8 +594,8 @@ class APiBaseAgent(APiTalkingAgent):
             for proc in pr.children(recursive=True):
                 proc.kill()
             pr.kill()
-        except:
-            pass
+        except Exception as e:
+            print(f"Error inputting http file {str(e)}")
 
     async def input_httpws_run(self, cmd, url):
         while not self.all_setup():
@@ -595,8 +610,8 @@ class APiBaseAgent(APiTalkingAgent):
             for proc in pr.children(recursive=True):
                 proc.kill()
             pr.kill()
-        except:
-            pass
+        except Exception as e:
+            print(f"Error inputting http websocket {str(e)}")
 
     async def input_httpnc_run(self, cmd):
         while not self.all_setup():
@@ -618,7 +633,7 @@ class APiBaseAgent(APiTalkingAgent):
                 proc.kill()
             pr.kill()
         except Exception as e:
-            pass
+            print(f"Error inputting http netcat {str(e)}")
 
     async def input_http(self, data, callback=False):
         if self.input_value_type == "BINARY":
@@ -643,6 +658,7 @@ class APiBaseAgent(APiTalkingAgent):
                             await self.output_callback(i)
                     error = False
                 except Exception as e:
+                    print(f"Error inputting http {str(e)}")
                     sleep(0.2)
             if d == self.input_end:
                 self.service_quit("Received end delimiter, shutting down HTTP server!")
@@ -665,8 +681,8 @@ class APiBaseAgent(APiTalkingAgent):
             for proc in pr.children(recursive=True):
                 proc.kill()
             pr.kill()
-        except:
-            pass
+        except Exception as e:
+            print(f"Error inputting ws stdout {str(e)}")
 
     async def input_wsfile_run(self, cmd, file_path):
         while not self.all_setup():
@@ -681,8 +697,8 @@ class APiBaseAgent(APiTalkingAgent):
             for proc in pr.children(recursive=True):
                 proc.kill()
             pr.kill()
-        except:
-            pass
+        except Exception as e:
+            print(f"Error inputting ws file {str(e)}")
 
     async def input_wshttp_run(self, cmd, url):
         while not self.all_setup():
@@ -702,8 +718,8 @@ class APiBaseAgent(APiTalkingAgent):
             for proc in pr.children(recursive=True):
                 proc.kill()
             pr.kill()
-        except:
-            pass
+        except Exception as e:
+            print(f"Error inputting ws http {str(e)}")
 
     async def input_wsws_run(self, cmd, url):
         while not self.all_setup():
@@ -723,8 +739,8 @@ class APiBaseAgent(APiTalkingAgent):
             for proc in pr.children(recursive=True):
                 proc.kill()
             pr.kill()
-        except:
-            pass
+        except Exception as e:
+            print(f"Error inputting ws ws {str(e)}")
 
     async def input_wsnc_run(self, cmd):
         while not self.all_setup():
@@ -746,7 +762,7 @@ class APiBaseAgent(APiTalkingAgent):
                 proc.kill()
             pr.kill()
         except Exception as e:
-            pass
+            print(f"Error inputting ws netcat {str(e)}")
 
     def input_ws(self, data, callback=False):
         if self.input_value_type == "BINARY":
@@ -754,11 +770,12 @@ class APiBaseAgent(APiTalkingAgent):
         if self.input_delimiter:
             inp = [i for i in data.split(self.input_delimiter) if i != ""]
         else:
-            imp = [data]
+            inp = [data]
         for i in inp:
             try:
                 loop = asyncio.get_event_loop()
-            except:
+            except Exception as e:
+                print(f"Error getting event loop {str(e)}")
                 loop = asyncio.new_event_loop()
             loop.run_until_complete(self.ws(i, callback))
             if i == self.input_end:
@@ -783,6 +800,7 @@ class APiBaseAgent(APiTalkingAgent):
                             await self.output_callback(i)
                     error = False
             except Exception as e:
+                print(f"Error connecting to websocket {str(e)}")
                 sleep(0.2)
 
     async def input_ncstdout_run(self, cmd):
@@ -803,8 +821,8 @@ class APiBaseAgent(APiTalkingAgent):
             for proc in pr.children(recursive=True):
                 proc.kill()
             pr.kill()
-        except:
-            pass
+        except Exception as e:
+            print(f"Error inputting nc stdout {str(e)}")
 
     async def input_ncfile_run(self, cmd, file_path):
         while not self.all_setup():
@@ -819,8 +837,8 @@ class APiBaseAgent(APiTalkingAgent):
             for proc in pr.children(recursive=True):
                 proc.kill()
             pr.kill()
-        except:
-            pass
+        except Exception as e:
+            print(f"Error inputting nc file {str(e)}")
 
     async def input_nchttp_run(self, cmd, url):
         while not self.all_setup():
@@ -840,8 +858,8 @@ class APiBaseAgent(APiTalkingAgent):
             for proc in pr.children(recursive=True):
                 proc.kill()
             pr.kill()
-        except:
-            pass
+        except Exception as e:
+            print(f"Error inputting nc http {str(e)}")
 
     async def input_ncws_run(self, cmd, url):
         while not self.all_setup():
@@ -856,8 +874,8 @@ class APiBaseAgent(APiTalkingAgent):
             for proc in pr.children(recursive=True):
                 proc.kill()
             pr.kill()
-        except:
-            pass
+        except Exception as e:
+            print(f"Error inputting nc ws {str(e)}")
 
     async def input_ncnc_run(self, cmd):
         while not self.all_setup():
@@ -879,7 +897,7 @@ class APiBaseAgent(APiTalkingAgent):
                 proc.kill()
             pr.kill()
         except Exception as e:
-            pass
+            print(f"Error inputting nc netcat {str(e)}")
 
     async def input_nc(self, data, callback=False):
         if self.input_value_type == "BINARY":
@@ -891,7 +909,7 @@ class APiBaseAgent(APiTalkingAgent):
         if self.input_delimiter:
             inp = [i for i in data.split(self.input_delimiter) if i != ""]
         else:
-            imp = [data]
+            inp = [data]
         sleep(0.1)
         for i in inp:
             try:
@@ -909,6 +927,7 @@ class APiBaseAgent(APiTalkingAgent):
                             await self.output_callback(j)
 
             except Exception as e:
+                print(f"Error inputting nc {str(e)}")
                 self.nc_client.close()
                 self.service_quit("NETCAT process ended, quitting!")
                 return None
@@ -990,7 +1009,7 @@ class APiBaseAgent(APiTalkingAgent):
             if self.ncncrec_thread:
                 self.ncncrec_thread.start()
         except Exception as e:
-            pass
+            print(f"Error starting service {str(e)}")
 
     def service_quit(self, msg=""):
         """
@@ -1071,7 +1090,7 @@ class APiBaseAgent(APiTalkingAgent):
             if self.ncncrec_thread:
                 self.ncncrec_thread.join()
         except Exception as e:
-            pass
+            print(f"Error quitting service {str(e)}")
 
         if self.http_proc:
             self.http_proc.terminate()
@@ -1479,6 +1498,7 @@ class APiBaseAgent(APiTalkingAgent):
                     )
                     error = False
                 except Exception as e:
+                    print(f"Error inputting nc stdout {str(e)}")
                     sleep(0.1)
 
         elif self.input_type[:6] == "NETCAT" and self.output_type[:4] == "FILE":
@@ -1508,6 +1528,7 @@ class APiBaseAgent(APiTalkingAgent):
                     )
                     error = False
                 except Exception as e:
+                    print(f"Error inputting nc file {str(e)}")
                     sleep(0.1)
 
         elif self.input_type[:6] == "NETCAT" and self.output_type[:4] == "HTTP":
@@ -1533,6 +1554,7 @@ class APiBaseAgent(APiTalkingAgent):
                     )
                     error = False
                 except Exception as e:
+                    print(f"Error inputting nc http {str(e)}")
                     sleep(0.1)
 
         elif self.input_type[:6] == "NETCAT" and self.output_type[:2] == "WS":
@@ -1558,6 +1580,7 @@ class APiBaseAgent(APiTalkingAgent):
                     )
                     error = False
                 except Exception as e:
+                    print(f"Error inputting nc ws {str(e)}")
                     sleep(0.1)
 
         elif self.input_type[:6] == "NETCAT" and self.output_type[:6] == "NETCAT":
@@ -1586,6 +1609,7 @@ class APiBaseAgent(APiTalkingAgent):
                         )
                         error = False
                     except Exception as e:
+                        print(f"Error inputting nc netcat {str(e)}")
                         sleep(0.1)
 
             else:
@@ -1604,6 +1628,7 @@ class APiBaseAgent(APiTalkingAgent):
 
                         error = False
                     except Exception as e:
+                        print(f"Error inputting nc netcat {str(e)}")
                         sleep(0.1)
 
                 self.ncncrec_thread = Thread(

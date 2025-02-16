@@ -1,0 +1,33 @@
+[tool.poetry]
+name = "src"
+version = "1.0.0"
+description = "awkward-pi-nguin"
+authors = ["Markus Schatten", "Tomislav Peharda"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "3.8.17"
+Click = "7.0"
+Flask = "1.1.1"
+PyYAML = "3.13"
+aiodebug = "1.1.2"
+aiofiles = "0.6.0"
+antlr4-python3-runtime = "4.13.0"
+fnvhash = "0.1.0"
+nclib = "1.0.0"
+pexpect = "4.6.0"
+psutil = "5.5.1"
+requests = "2.22.0"
+spade = "3.2.3"
+websockets = "8.1"
+xmltodict = "^0.13.0" 
+aiohttp = "3.7.4.post0"
+pydantic = "^2.10.6"
+pydantic-settings = "^2.7.1"
+
+[tool.poetry.scripts]
+post_install = "post_install:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

@@ -29,6 +29,9 @@ except ImportError:
     from yaml import Loader, load
 
 
+_AGENT_FILE_NAME_TEMPLATE = "{file_name}.ad"
+
+
 class APiAgent(APiBaseWrapperAgent):
     """Service wrapper agent."""
 
@@ -52,12 +55,16 @@ class APiAgent(APiBaseWrapperAgent):
         token - token from holon
         flows - list of message flows (from APi statement)
         """
+        print("1")
         try:
-            fh = open(agentname + ".ad")
+            name = _AGENT_FILE_NAME_TEMPLATE.format(file_name=agentname)
+            name = "agent_definitions/" + name
+            fh = open(name)
         except IOError as e:
             err = "Missing agent definition file or permission issue.\n" + str(e)
             raise APiIOError(err)
         super().__init__(name, password, token)
+        print("2")
 
         self.agentname = agentname
         self.holon_name = holon_name
@@ -65,6 +72,7 @@ class APiAgent(APiBaseWrapperAgent):
         self.holons_address_book = holons_address_book
         self._load(fh)
 
+        print("3")
         self.flows = []
         for f in flows:
             if len(f) == 2:
@@ -74,6 +82,7 @@ class APiAgent(APiBaseWrapperAgent):
             else:
                 self.flows.append(f)
 
+        print("4")
         self.input_channels = set(
             i[0] for i in self.flows if i[1] == "self" and len(i) == 2
         )
@@ -81,6 +90,7 @@ class APiAgent(APiBaseWrapperAgent):
             i[1] for i in self.flows if i[0] == "self" and len(i) == 2
         )
 
+        print("5")
         self.input_channel_query_buffer = []
         self.output_channel_query_buffer = []
         self.input_env_query_buffer = []
@@ -128,6 +138,7 @@ class APiAgent(APiBaseWrapperAgent):
         self.inform_msg_template["auth-token"] = self.auth
         # Add exit-status (finished, error) and error-message (actual stacktrace, error code etc.); or add status (ready)
 
+        print("6")
         for i in self.input_channels:
             try:
                 self.subscribe_to_channel(i, "input")
@@ -139,6 +150,7 @@ class APiAgent(APiBaseWrapperAgent):
             except NotImplementedError as e:
                 print(f"Not implemented for {str(e)}", i)
 
+        print("7")
         self.input_ended = False
 
         self.shell_ip_stdin = None
@@ -146,6 +158,8 @@ class APiAgent(APiBaseWrapperAgent):
         self.shell_ip_stdout = None
         self.shell_port_stdout = None
         self.shell_buffer = []
+
+        print("8")
 
     def _load(self, fh):
         """

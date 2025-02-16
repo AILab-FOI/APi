@@ -113,15 +113,20 @@ class APiHolon(APiTalkingAgent):
             flows = self.adjust_flows_by_args(agent["args"], params, agent["flows"])
         else:
             flows = agent["flows"]
-        agent["cmd"] = 'python3 ../agent.py "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s"' % (
-            agent["name"],
-            address,
-            password,
-            self.address,
-            self.holonname,
-            self.token,
-            json.dumps(flows).replace('"', '\\"'),
-            json.dumps(self.holons).replace('"', '\\"'),
+
+        # NOTE: This should be updated if agent.py is moved around
+        agent["cmd"] = (
+            'poetry run python ../src/agents/agent.py "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s"'
+            % (
+                agent["name"],
+                address,
+                password,
+                self.address,
+                self.holonname,
+                self.token,
+                json.dumps(flows).replace('"', '\\"'),
+                json.dumps(self.holons).replace('"', '\\"'),
+            )
         )
         agent["address"] = address
         agent["status"] = "setup"
@@ -132,8 +137,14 @@ class APiHolon(APiTalkingAgent):
     def setup_channel(self, channel):
         address, password = self.registrar.register(channel["name"])
         self.say("Registering channel", channel["name"])
+
+        import os
+
+        print(os.listdir("."))
+
+        # NOTE: This should be updated if channel.py is moved around
         channel["cmd"] = (
-            'python3 ../channel.py "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s"'
+            'poetry run python ../src/agents/channel.py "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s"'
             % (
                 channel["name"],
                 address,
@@ -158,8 +169,10 @@ class APiHolon(APiTalkingAgent):
         environment = {}
         environment["name"] = f"{self.holonname}-environment"
         address, password = self.registrar.register(environment["name"])
+
+        # NOTE: This should be updated if environment.py is moved around
         environment["cmd"] = (
-            'python3 ../environment.py "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s"'
+            'poetry run python ../src/agents/environment.py "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s"'
             % (
                 environment["name"],
                 address,
@@ -661,7 +674,7 @@ class APiHolon(APiTalkingAgent):
                         self.agent.say("(StopAgents) All agents have stopped ...")
                         self.agent.say("(StopAgents) Holon stopping ...")
 
-                        super().stop()
+                        await super().stop()
 
                 else:
                     self.agent.say("Message could not be verified. IMPOSTER!!!!!!")

@@ -1,8 +1,3 @@
-#!/usr/bin/env python3
-
-from src.utils.helpers import *
-from debug import *
-
 import spade
 from spade.agent import Agent
 from spade.behaviour import OneShotBehaviour, CyclicBehaviour
@@ -56,6 +51,22 @@ import itertools as it
 import socket
 from copy import deepcopy
 from src.agents.base.base_talking_agent import APiTalkingAgent
+from src.utils.errors import (
+    APiCommunicationError,
+    APiAgentDefinitionError,
+    APiCallbackException,
+)
+from src.utils.constants import (
+    NIE,
+    http_re,
+    ws_re,
+    file_re,
+    time_re,
+    size_re,
+    delimiter_re,
+    regex_re,
+    netcat_re,
+)
 
 
 class APiBaseWrapperAgent(APiTalkingAgent):
@@ -137,6 +148,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
                             await self.output_callback(r)
                 not_available = False
             except Exception as e:
+                print("Error reading url", e)
                 await asyncio.sleep(0.2)
 
     async def read_ws(self, url):
@@ -171,7 +183,8 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             except Exception as e:
                 try:
                     assert e.errno == 111
-                except:
+                except Exception as e:
+                    print("Error reading ws", e)
                     error = False
 
                 await asyncio.sleep(0.2)
@@ -190,6 +203,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
                 ncclient = nclib.Netcat((host, port), udp=udp, raise_eof=True)
                 not_available = False
             except Exception as e:
+                print("Error creating nc client", e)
                 sleep(0.2)
 
         error = False
@@ -208,6 +222,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
                 elif self.input_ended:
                     raise Exception("Done")
             except Exception as e:
+                print("Error reading nc", e)
                 error = True
 
     async def write_stdin(self, stdin):
@@ -233,6 +248,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
                         await stdin.drain()
                         await asyncio.sleep(0.1)
                     except ConnectionResetError as e:
+                        print("Error writing stdin", e)
                         self.service_quit("STDIN connection reset, quitting!")
                         break
         stdin.close()
@@ -338,7 +354,8 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             for proc in pr.children(recursive=True):
                 proc.kill()
             pr.kill()
-        except:
+        except Exception as e:
+            print("Error killing process", e)
             pass
 
     async def input_stdinws_run(self, cmd, url):
@@ -359,7 +376,8 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             for proc in pr.children(recursive=True):
                 proc.kill()
             pr.kill()
-        except:
+        except Exception as e:
+            print("Error killing process", e)
             pass
 
     async def input_stdinnc_run(self, cmd, host, port, udp):
@@ -380,13 +398,14 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             for proc in pr.children(recursive=True):
                 proc.kill()
             pr.kill()
-        except:
+        except Exception as e:
+            print("Error killing process", e)
             pass
 
     async def input_filefile_run(self, cmd, file_path):
         while not self.all_setup():
             await asyncio.sleep(0.1)
-        proc = await asyncio.create_subprocess_shell(cmd, stdin=asyncio.subprocess.PIPE)
+        await asyncio.create_subprocess_shell(cmd, stdin=asyncio.subprocess.PIPE)
 
         await asyncio.gather(self.read_file(file_path))
 
@@ -408,7 +427,8 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             for proc in pr.children(recursive=True):
                 proc.kill()
             pr.kill()
-        except:
+        except Exception as e:
+            print("Error killing process", e)
             pass
 
     async def input_filews_run(self, cmd, file_path, url):
@@ -429,7 +449,8 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             for proc in pr.children(recursive=True):
                 proc.kill()
             pr.kill()
-        except:
+        except Exception as e:
+            print("Error killing process", e)
             pass
 
     async def input_filenc_run(self, cmd, file_path):
@@ -450,6 +471,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
                 proc.kill()
             pr.kill()
         except Exception as e:
+            print("Error killing process", e)
             pass
 
     async def input_httpstdout_run(self, cmd):
@@ -469,7 +491,8 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             for proc in pr.children(recursive=True):
                 proc.kill()
             pr.kill()
-        except:
+        except Exception as e:
+            print("Error killing process", e)
             pass
 
     async def input_httphttp_run(self, cmd, url):
@@ -490,7 +513,8 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             for proc in pr.children(recursive=True):
                 proc.kill()
             pr.kill()
-        except:
+        except Exception as e:
+            print("Error killing process", e)
             pass
 
     async def input_httpfile_run(self, cmd, file_path):
@@ -506,7 +530,8 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             for proc in pr.children(recursive=True):
                 proc.kill()
             pr.kill()
-        except:
+        except Exception as e:
+            print("Error killing process", e)
             pass
 
     async def input_httpws_run(self, cmd, url):
@@ -522,7 +547,8 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             for proc in pr.children(recursive=True):
                 proc.kill()
             pr.kill()
-        except:
+        except Exception as e:
+            print("Error killing process", e)
             pass
 
     async def input_httpnc_run(self, cmd):
@@ -545,6 +571,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
                 proc.kill()
             pr.kill()
         except Exception as e:
+            print("Error killing process", e)
             pass
 
     async def input_http(self, data, callback=False):
@@ -570,6 +597,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
                             await self.output_callback(i)
                     error = False
                 except Exception as e:
+                    print("Error input_http", e)
                     sleep(0.2)
             if d == self.input_end:
                 self.service_quit("Received end delimiter, shutting down HTTP server!")
@@ -592,7 +620,8 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             for proc in pr.children(recursive=True):
                 proc.kill()
             pr.kill()
-        except:
+        except Exception as e:
+            print("Error killing process", e)
             pass
 
     async def input_wsfile_run(self, cmd, file_path):
@@ -608,7 +637,8 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             for proc in pr.children(recursive=True):
                 proc.kill()
             pr.kill()
-        except:
+        except Exception as e:
+            print("Error killing process", e)
             pass
 
     async def input_wshttp_run(self, cmd, url):
@@ -629,7 +659,8 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             for proc in pr.children(recursive=True):
                 proc.kill()
             pr.kill()
-        except:
+        except Exception as e:
+            print("Error killing process", e)
             pass
 
     async def input_wsws_run(self, cmd, url):
@@ -650,7 +681,8 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             for proc in pr.children(recursive=True):
                 proc.kill()
             pr.kill()
-        except:
+        except Exception as e:
+            print("Error killing process", e)
             pass
 
     async def input_wsnc_run(self, cmd):
@@ -673,6 +705,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
                 proc.kill()
             pr.kill()
         except Exception as e:
+            print("Error killing process", e)
             pass
 
     def input_ws(self, data, callback=False):
@@ -681,11 +714,12 @@ class APiBaseWrapperAgent(APiTalkingAgent):
         if self.input_delimiter:
             inp = [i for i in data.split(self.input_delimiter) if i != ""]
         else:
-            imp = [data]
+            inp = [data]
         for i in inp:
             try:
                 loop = asyncio.get_event_loop()
-            except:
+            except Exception as e:
+                print("Error getting event loop", e)
                 loop = asyncio.new_event_loop()
             loop.run_until_complete(self.ws(i, callback))
             if i == self.input_end:
@@ -710,6 +744,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
                             await self.output_callback(i)
                     error = False
             except Exception as e:
+                print("Error ws", e)
                 sleep(0.2)
 
     async def input_ncstdout_run(self, cmd):
@@ -730,7 +765,8 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             for proc in pr.children(recursive=True):
                 proc.kill()
             pr.kill()
-        except:
+        except Exception as e:
+            print("Error killing process", e)
             pass
 
     async def input_ncfile_run(self, cmd, file_path):
@@ -746,7 +782,8 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             for proc in pr.children(recursive=True):
                 proc.kill()
             pr.kill()
-        except:
+        except Exception as e:
+            print("Error killing process", e)
             pass
 
     async def input_nchttp_run(self, cmd, url):
@@ -767,7 +804,8 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             for proc in pr.children(recursive=True):
                 proc.kill()
             pr.kill()
-        except:
+        except Exception as e:
+            print("Error killing process", e)
             pass
 
     async def input_ncws_run(self, cmd, url):
@@ -783,7 +821,8 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             for proc in pr.children(recursive=True):
                 proc.kill()
             pr.kill()
-        except:
+        except Exception as e:
+            print("Error killing process", e)
             pass
 
     async def input_ncnc_run(self, cmd):
@@ -806,6 +845,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
                 proc.kill()
             pr.kill()
         except Exception as e:
+            print("Error killing process", e)
             pass
 
     async def input_nc(self, data, callback=False):
@@ -818,7 +858,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
         if self.input_delimiter:
             inp = [i for i in data.split(self.input_delimiter) if i != ""]
         else:
-            imp = [data]
+            inp = [data]
         sleep(0.1)
         for i in inp:
             try:
@@ -836,6 +876,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
                             await self.output_callback(j)
 
             except Exception as e:
+                print("Error input_nc", e)
                 self.nc_client.close()
                 self.service_quit("NETCAT process ended, quitting!")
                 return None
@@ -998,6 +1039,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             if self.ncncrec_thread:
                 self.ncncrec_thread.join()
         except Exception as e:
+            print("Error joining threads", e)
             pass
 
         if self.http_proc:
@@ -1406,6 +1448,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
                     )
                     error = False
                 except Exception as e:
+                    print("Error creating nc client", e)
                     sleep(0.1)
 
         elif self.input_type[:6] == "NETCAT" and self.output_type[:4] == "FILE":
@@ -1435,6 +1478,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
                     )
                     error = False
                 except Exception as e:
+                    print("Error creating nc client", e)
                     sleep(0.1)
 
         elif self.input_type[:6] == "NETCAT" and self.output_type[:4] == "HTTP":
