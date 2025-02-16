@@ -21,6 +21,7 @@ from spade.template import Template
 from time import sleep
 from src.utils.constants import NIE, TMP_FOLDER
 import os
+from src.utils.logger import setup_logger
 
 try:
     from yaml import CLoader as Loader, load
@@ -29,6 +30,8 @@ except ImportError:
 
 
 _AGENT_FILE_NAME_TEMPLATE = "{file_name}.ad"
+
+logger = setup_logger("agent")
 
 
 class APiAgent(APiBaseWrapperAgent):
@@ -54,6 +57,12 @@ class APiAgent(APiBaseWrapperAgent):
         token - token from holon
         flows - list of message flows (from APi statement)
         """
+
+        global logger
+        logger = setup_logger("agent " + agentname)
+
+        logger.info("Initializing agent...")
+
         try:
             file_name = (
                 "../examples/agent_definitions/"
@@ -137,12 +146,12 @@ class APiAgent(APiBaseWrapperAgent):
             try:
                 self.subscribe_to_channel(i, "input")
             except NotImplementedError as e:
-                print(f"Not implemented for {str(e)}", i)
+                logger.error(f"Not implemented for {str(e)}", i)
         for i in self.output_channels:
             try:
                 self.subscribe_to_channel(i, "output")
             except NotImplementedError as e:
-                print(f"Not implemented for {str(e)}", i)
+                logger.error(f"Not implemented for {str(e)}", i)
 
         self.input_ended = False
 
@@ -264,13 +273,13 @@ class APiAgent(APiBaseWrapperAgent):
 
     async def output_callback(self, data):
         """
-        Output callback method.
-        data - data read from service.
+        Method used to send agent output / message to channels / environments it is attached to.
         """
+
         self.shell_buffer.append(data)
-        self.say("I just received:", data)
-        for srv in self.output_channel_servers.values():
-            print("SENDING", data.encode(), "to", srv["port"], "... ", end="")
+        logger.info(f"About to send {data.encode()} to attached channels")
+        for channel, srv in self.output_channel_servers.items():
+            logger.info(f"Sending {data.encode()} to {channel}...")
             is_udp = srv["protocol"] == "udp"
             sent = False
             srv["socket"] = nclib.Netcat((srv["server"], srv["port"]), udp=is_udp)
@@ -278,17 +287,10 @@ class APiAgent(APiBaseWrapperAgent):
                 try:
                     srv["socket"].sendline(data.encode())
                     sent = True
-                    print(" DONE!")
+                    logger.info(f"Done sending to channel {channel}")
                 except (BrokenPipeError, ConnectionResetError):
-                    print(
-                        "ERROR SENDING",
-                        data,
-                        "TO",
-                        srv["server"],
-                        srv["port"],
-                        "(BROKEN PIPE)",
-                    )
-                    print("TRYING TO RECONNECT")
+                    logger.error(f"Error sending {data} (BROKEN PIPE)")
+                    logger.info("Attempting to reconnect")
                     srv["socket"] = nclib.Netcat(
                         (srv["server"], srv["port"]), udp=is_udp
                     )
@@ -324,7 +326,6 @@ class APiAgent(APiBaseWrapperAgent):
             elif channel in list(self.holons_address_book.keys()):
                 self.input_holon_query_buffer.append(channel)
             else:
-                self.say("Adding input channel", channel)
                 self.input_channel_query_buffer.append(channel)
         elif channel_type == "output":
             if channel == "NIL":
@@ -345,7 +346,6 @@ class APiAgent(APiBaseWrapperAgent):
             elif channel in list(self.holons_address_book.keys()):
                 self.output_holon_query_buffer.append(channel)
             else:
-                self.say("Adding output channel", channel)
                 self.output_channel_query_buffer.append(channel)
 
     def start_shell_stdin(self, prompt=False):
@@ -400,7 +400,7 @@ class APiAgent(APiBaseWrapperAgent):
                     threads.append(t)
                 error = False
             except Exception as e:
-                print("Error receiving from client", e)
+                logger.error("Error receiving from client", e)
                 error = True
                 sleep(0.1)
 
@@ -443,7 +443,7 @@ class APiAgent(APiBaseWrapperAgent):
                             self.shell_socket_stdout.close()
                             return
             except Exception as e:
-                print("Error in start_shell_stdout", e)
+                logger.error("Error in start_shell_stdout", e)
                 sleep(0.1)
 
     def start_shell_client(
@@ -869,6 +869,10 @@ class APiAgent(APiBaseWrapperAgent):
                             if is_udp:
                                 servers[channel]["socket"].send("connected")
 
+                            logger.info(
+                                f"Connected to input channel {channel} at {msg.metadata['server']}:{msg.metadata['port']}"
+                            )
+
                             if len(self.agent.output_channel_servers) == len(
                                 self.agent.output_channels
                             ) and len(self.agent.input_channel_servers) == len(
@@ -929,6 +933,10 @@ class APiAgent(APiBaseWrapperAgent):
                                 udp=is_udp,
                             )
 
+                            logger.info(
+                                f"Connected to output channel {channel} at {msg.metadata['server']}:{msg.metadata['port']}"
+                            )
+
                             if len(self.agent.output_channel_servers) == len(
                                 self.agent.output_channels
                             ) and len(self.agent.input_channel_servers) == len(
@@ -957,7 +965,7 @@ class APiAgent(APiBaseWrapperAgent):
         async def run(self):
             # TODO: Deal with forward channels
             if self.agent.all_setup():
-                for srv in self.agent.input_channel_servers.values():
+                for channel, srv in self.agent.input_channel_servers.items():
                     is_udp = True if srv["protocol"] == "udp" else False
 
                     if is_udp:
@@ -970,15 +978,10 @@ class APiAgent(APiBaseWrapperAgent):
                         )
                     # sleep( 0.5 ) # TODO: Investigate if this line is needed
                     if result:
-                        self.agent.say(
-                            "(Listen) Received",
-                            result,
-                            "from server",
-                            srv["server"],
-                            srv["port"],
+                        logger.info(
+                            f"Received message from channel {channel}: {result}"
                         )
                         self.agent.input(result.decode())
-                        print("!" * 100)
 
     """
     Waiting for holon to give green light to start

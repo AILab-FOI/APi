@@ -7,16 +7,16 @@ agent:
    feel like writing a good
    description.
  type: unix # docker, kubernetes-pod 
- start: cat input_test.txt | grep --line-buffered uhu > output_test.txt
+ start: cat ./inputs/input_test.txt | grep --line-buffered uhu > output_test.txt
  input:
-  type: FILE input_test.txt #  STDIN ; FILE <filepath> ; HTTP <address>:<port>/<url> ; WS <address>:<port> ; NETCAT <cmd>
+  type: FILE ./inputs/input_test.txt #  STDIN ; FILE <filepath> ; HTTP <address>:<port>/<url> ; WS <address>:<port> ; NETCAT <cmd>
   data-type: STREAM # ONEVALUE
   fmt: { "data":DATA } # in STREAM data-type DATA is a chunk of data, in ONEVALUE it is all data
   cutoff: DELIMITER NEWLINE # DELIMITER any character combination ;; TIME 0.02 - in seconds ;; SIZE 1024 - in bytes ;; REGEX (delim)|([\n])
   end: <!eof!> # NEWLINE ; any character combination ;; only for STREAM data-type, ending delimiter
   value-type: STRING # BINARY
  output: # possibilities same as input
-  type: FILE output_test.txt 
+  type: FILE ./outputs/output_test.txt 
   data-type: STREAM
   fmt: { "data":DATA }
   cutoff: DELIMITER NEWLINE

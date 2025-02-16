@@ -6,6 +6,9 @@ from copy import deepcopy
 from pyxf.pyxf import swipl
 import socket
 import nclib
+from src.utils.logger import setup_logger
+
+logger = setup_logger("base_channel_agent")
 
 
 class APiBaseChannel(APiTalkingAgent):
@@ -22,6 +25,9 @@ class APiBaseChannel(APiTalkingAgent):
         channel_input=None,
         channel_output=None,
     ):
+        global logger
+        logger = setup_logger("channel " + channelname)
+
         self.channelname = channelname
         self.holon = holon
         super().__init__(name, password, token)
@@ -51,7 +57,6 @@ class APiBaseChannel(APiTalkingAgent):
         else:
             if self.input.startswith("regex("):
                 reg = self.input[6:-1]
-                # print( 'RE', reg )
                 self.input_re = re.compile(reg)
                 self.map = self.map_re
             elif self.input.startswith("json("):
@@ -98,11 +103,8 @@ class APiBaseChannel(APiTalkingAgent):
         pass
 
     def map_re(self, data):
-        print("MAPRE DATA", data)
         match = self.input_re.match(data)
-        print("MAPRE MATCH", match)
         vars = self.input_re.groupindex.keys()
-        print("MAPRE MATCH", vars)
         results = {}
         if not match:
             return ""
@@ -220,9 +222,9 @@ class APiBaseChannel(APiTalkingAgent):
             try:
                 srv = self.create_server(port, protocol)
                 srv_created = True
-                print(f"{protocol} SERVER CONNECTED AT PORT", port)
+                logger.info(f"{protocol.upper()} server created at port {port}")
             except OSError as e:
-                print("Error starting socket server", e, port)
+                logger.error(f"Error starting socket server: {e} at port {port}")
                 port = self.get_free_port(protocol)
 
         return srv, host, str(port), protocol

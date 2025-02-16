@@ -7,7 +7,7 @@ agent:
    feel like writing a good
    description.
  type: unix # docker, kubernetes-pod 
- start: ./ws_stdout_server.py | ncat -l -p 2709
+ start: ./agents/ws_stdout_server.py | ncat -l -p 2709
  input:
   type: WS ws://localhost:3618/ #  STDIN ; FILE <filepath> ; HTTP <url> (make sure to include trailing / if needed) ; WS <url> ; NETCAT <host>:<port>[:<udp>]
   data-type: STREAM # ONEVALUE

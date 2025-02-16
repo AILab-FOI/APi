@@ -7,9 +7,9 @@ agent:
    feel like writing a good
    description.
  type: unix # docker, kubernetes-pod 
- start: cat json_input_test.txt
+ start: cat ./inputs/json_input_test.txt
  input:
-  type: FILE json_input_test.txt #  STDIN ; FILE <filepath> ; HTTP <address>:<port>/<url> ; WS <address>:<port> ; NETCAT <cmd>
+  type: FILE ./inputs/json_input_test.txt #  STDIN ; FILE <filepath> ; HTTP <address>:<port>/<url> ; WS <address>:<port> ; NETCAT <cmd>
   data-type: STREAM # ONEVALUE
   fmt: { "data":DATA } # in STREAM data-type DATA is a chunk of data, in ONEVALUE it is all data
   cutoff: DELIMITER NEWLINE # DELIMITER any character combination ;; TIME 0.02 - in seconds ;; SIZE 1024 - in bytes ;; REGEX (delim)|([\n])

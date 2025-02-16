@@ -16,7 +16,7 @@ agent:
   end: <!eof!> # NEWLINE ; any character combination ;; only for STREAM data-type, ending delimiter
   value-type: STRING # BINARY
  output: # possibilities same as input
-  type: FILE output_test.txt
+  type: FILE ./outputs/output_test.txt
   data-type: STREAM
   fmt: { "data":DATA }
   cutoff: DELIMITER NEWLINE

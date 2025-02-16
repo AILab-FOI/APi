@@ -8,6 +8,9 @@ import asyncio
 import nclib
 from spade.behaviour import CyclicBehaviour
 from spade.template import Template
+from src.utils.logger import setup_logger
+
+logger = setup_logger("channel")
 
 
 class APiChannel(APiBaseChannel):
@@ -25,6 +28,9 @@ class APiChannel(APiBaseChannel):
         channel_input=None,
         channel_output=None,
     ):
+        global logger
+        logger = setup_logger("channel " + channelname)
+
         super().__init__(
             channelname,
             name,
@@ -85,7 +91,7 @@ class APiChannel(APiBaseChannel):
                 try:
                     client.sendline(msg)
                 except Exception as ex:
-                    print("Run into error sending a msg over socket", ex)
+                    logger.error(f"Run into error sending a msg over socket: {ex}")
                     closed_clients.append(idx)
 
             # remove closed sockets -- might have to deal with concurrency
@@ -125,13 +131,13 @@ class APiChannel(APiBaseChannel):
                         _, ip, port, protocol = self.agent.get_subscribe_server(
                             self.agent.protocol
                         )
-                        print("ADDED subscribe server", ip, port)
+                        logger.info(f"Added subscribe server: {ip} for port {port}")
                     elif msg.metadata["performative"] == "request":
                         metadata["type"] = "output"
                         _, ip, port, protocol = self.agent.get_attach_server(
                             self.agent.protocol
                         )
-                        print("ADDED attach server", ip, port)
+                        logger.info(f"Added attach server: {ip} for port {port}")
                     else:
                         self.agent.say("Unknown message")
                         metadata = self.agent.refuse_message_template
@@ -171,7 +177,8 @@ class APiChannel(APiBaseChannel):
                         for client in srv:
                             yield client
                     except Exception as e:
-                        print("Error accepting client", e)
+                        if str(e) != "timed out":
+                            logger.error(f"Error accepting client: {e}")
                         return
 
             # Slusaju se poruke od svih agenata koji su attached, te je ovo cyclic behv jer
@@ -181,24 +188,23 @@ class APiChannel(APiBaseChannel):
                 for srv in self.agent.attach_servers:
                     srv.sock.settimeout(0.1)
                     for client in iter_clients(srv):
-                        self.agent.say("CLIENT", client, srv.addr)
                         # TODO should put in a method instead
                         if self.agent.protocol == "udp":
                             result = None
                             try:
                                 result, _ = client.sock.recvfrom(1024)
                             except Exception as e:
-                                print("Error receiving from client", e)
+                                logger.error(f"Error receiving from client: {e}")
                                 pass
                         else:
                             result = client.recv_until(
                                 self.agent.delimiter, timeout=0.1
                             )
-                        self.agent.say("RESULT", result, srv.addr)
+                        logger.info(f"Received result: {result}")
                         if result:
-                            self.agent.say("MAPPING RESULT", result.decode(), srv.addr)
+                            logger.info(f"Mapping result: {result}")
                             msg = self.agent.map(result.decode())
-                            self.agent.say("MSG", msg, srv.addr)
+                            logger.info(f"Sending msg: {msg}")
 
                             self.agent.send_to_subscribed_agents(msg.encode())
 

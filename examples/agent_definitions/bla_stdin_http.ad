@@ -7,7 +7,7 @@ agent:
    feel like writing a good
    description.
  type: unix # docker, kubernetes-pod 
- start: python3 stdin_server.py
+ start: python3 ./agents/stdin_server.py
  input:
   type: STDIN #  STDIN ; FILE <filepath> ; HTTP <url> (make sure to include trailing / if needed) ; WS <url> ; NETCAT <host>:<port>[:<udp>] (ex. localhost:1234:udp ; default is tcp)
   data-type: STREAM # ONEVALUE
