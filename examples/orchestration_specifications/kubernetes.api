@@ -1,0 +1,6 @@
+channel c . 
+agent bla_stdin_stdout : 
+	c -> self 
+agent api_kubernetes_example : 
+	self -> c 
+start bla_stdin_stdout | api_kubernetes_example 

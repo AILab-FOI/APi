@@ -7,6 +7,7 @@ services:
       - "./data/prosody/config:/etc/prosody:ro"
     ports:
       - "5222:5222"
+  
   api:
     container_name: api
     build:

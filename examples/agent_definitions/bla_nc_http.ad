@@ -1,0 +1,24 @@
+agent:
+ name: bla_nc_http
+ description: >
+   A cool little bla_nc_http agent.
+   This part is optional. Just
+   leave it blank if you do not
+   feel like writing a good
+   description.
+ type: unix # docker, kubernetes
+ start: ncat -l -p 3816 | ./stdin_server.py
+ input:
+  type: NETCAT localhost:3816 #  STDIN ; FILE <filepath> ; HTTP <url> (make sure to include trailing / if needed) ; WS <url> ; NETCAT <host>:<port>[:<udp>]
+  data-type: STREAM # ONEVALUE
+  fmt: { "data":DATA } # in STREAM data-type DATA is a chunk of data, in ONEVALUE it is all data
+  cutoff: DELIMITER NEWLINE # DELIMITER any character combination ;; TIME 0.02 - in seconds ;; SIZE 1024 - in bytes ;; REGEX (delim)|([\n])
+  end: <!eof!> # NEWLINE ; any character combination ;; only for STREAM data-type, ending delimiter
+  value-type: STRING # BINARY
+ output: # possibilities same as input
+  type: HTTP http://localhost:2709/
+  data-type: STREAM
+  fmt: { "data":DATA }
+  cutoff: DELIMITER NEWLINE
+  end: <!eof!> 
+  value-type: STRING
