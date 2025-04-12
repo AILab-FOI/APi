@@ -15,8 +15,9 @@ Run the following steps to start up the dockerized environment:
 
 1. `docker-compose up -d` -- which shall download & build the containers
 2. `docker exec -ti api /bin/bash` -- to bash into the python3 environment
-3. From inside the bash shell: `poetry run python3 src/main.py basic.api` -- in order to run the application with the communication flows specification file
-4. To view live prosody logs, which might be helpful as they preview connections, run: `docker logs -f --tail 10 prosody`
+3. Create a copy of `.env.sample`, name it `.env` and adjust values accordingly
+4. From inside the bash shell: `poetry run python3 src/main.py basic.api` -- in order to run the application with the communication flows specification file
+5. To view live prosody logs, which might be helpful as they preview connections, run: `docker logs -f --tail 10 prosody`
 
 ## Running Dockererized agents inside the container
 
