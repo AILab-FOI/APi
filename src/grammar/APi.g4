@@ -42,7 +42,7 @@ arglist : '(' IDENT (WS IDENT)* ')';
 
 aflow : TAB valid_channel WS A_SENDS WS valid_channel NEWLINE ;
 
-valid_channel : IDENT | SELF | NIL | STDIN | STDOUT | STDERR | VOID ;
+valid_channel : IDENT | SELF | STDIN | STDOUT | STDERR ;
 
 s_channel : CHANNEL WS IDENT WS ':' NEWLINE s_channel_spec ;
 
@@ -100,8 +100,6 @@ STDERR : 'stderr' ;
 
 STDIN : 'stdin' ;
 
-VOID : 'void' ;
-
 IMPORT : 'import' ;
 
 ENVIRONMENT : 'environment' ;
@@ -141,8 +139,6 @@ UDP : '*->' ;
 TCP_BW : '<--' ;
 
 UDP_BW : '<-*' ;
-
-NIL     : '0' ;
 
 COMMENT : COMMENT1 | COMMENT2 ;
 

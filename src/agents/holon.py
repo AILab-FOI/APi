@@ -137,7 +137,7 @@ class APiHolon(APiCommunication):
 
         # NOTE: This should be updated if agent.py is moved around
         agent["cmd"] = (
-            'poetry run python ../src/agents/agent.py "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s"'
+            'poetry run python ../src/agents/agent.py "%s" "%s" "%s" "%s" "%s" "%s" "%s"'
             % (
                 agent["name"],
                 address,
@@ -146,7 +146,6 @@ class APiHolon(APiCommunication):
                 self.holonname,
                 self.token,
                 json.dumps(flows).replace('"', '\\"'),
-                json.dumps(self.holons).replace('"', '\\"'),
             )
         )
         agent["address"] = address
@@ -392,7 +391,7 @@ class APiHolon(APiCommunication):
 
         super().setup()
 
-        bqn = self.QueryName()
+        bqn = self.AgentRequestForAddress()
         bqn_template = Template(metadata={"performative": "query-ref", "ontology": "APiQuery"})
         self.add_behaviour(bqn, bqn_template)
 
@@ -407,7 +406,7 @@ class APiHolon(APiCommunication):
         )
         self.add_behaviour(bgra, bgra_template)
 
-        bgla = self.GetListeningAgents()
+        bgla = self.GetListeningAgentsAndChannels()
         bgla_template = Template(
             metadata={
                 "performative": "inform",
@@ -443,9 +442,11 @@ class APiHolon(APiCommunication):
         )
         self.add_behaviour(bsa, bsa_template)
 
-    class QueryName(CyclicBehaviour):
+    class AgentRequestForAddress(CyclicBehaviour):
         """
-        Query behaviour for the holon name.
+        Agent request for address.
+
+        Agent will request for address of a channel. Holon will respond with the address.
         """
 
         async def run(self) -> None:
@@ -486,11 +487,8 @@ class APiHolon(APiCommunication):
         """
         Get ready agents behaviour.
 
-        Behaviour that listens to XMPP mesage that is sent from an agent when it is ready setting up.
-        Agent will communicate their status over XMPP.
-
-        Ontology: APiScheduling
-        Status: finished
+        Started up agents will notify when they are ready and waiting for further instructions.
+        Once all agents are ready, holon will inform them they can start with the execution.
         """
 
         async def run(self) -> None:
@@ -509,22 +507,24 @@ class APiHolon(APiCommunication):
                     metadata["in-reply-to"] = msg.metadata["reply-with"]
                     await self.agent.schedule_message(str(msg.sender), metadata=metadata)
 
-    class GetListeningAgents(CyclicBehaviour):
+    class GetListeningAgentsAndChannels(CyclicBehaviour):
         """
-        Get listening agents behaviour.
+        Get listening agents and channels behaviour.
+
+        All agents and channels will notify when they are listening.
         """
 
         async def run(self) -> None:
             msg = await self.receive(timeout=0.1)
             if msg:
                 if self.agent.verify(msg):
-                    logger.debug("(GetListeningAgents) Message verified, processing ...")
+                    logger.debug("(GetListeningAgentsAndChannels) Message verified, processing ...")
                     type = msg.metadata["type"]
 
                     if type == "channel":
                         channel = self.agent.channel_name_from_address(msg.sender.bare())
                         logger.debug(
-                            f"(QueryNameGetReadyChannel) Setting channel {channel} status to listening."
+                            f"(GetListeningAgentsAndChannels) Setting channel {channel} status to listening."
                         )
                         self.agent.channels[channel]["status"] = "listening"
 
@@ -561,6 +561,8 @@ class APiHolon(APiCommunication):
     class AllChannelsListening(OneShotBehaviour):
         """
         All channels listening behaviour.
+
+        Behaviour that checks if all channels are listening, in which case it will start the agents.
         """
 
         async def run(self) -> None:
@@ -578,6 +580,8 @@ class APiHolon(APiCommunication):
     class ExecutePlan(CyclicBehaviour):
         """
         Execute plan behaviour.
+
+        This behaviour checks what are the execution plans that can be executed.
         """
 
         async def run(self) -> None:
@@ -637,7 +641,7 @@ class APiHolon(APiCommunication):
         """
         Finished agents behaviour.
 
-        Behaviour that listens to XMPP mesage that is sent from an agent when it is finished setting up.
+        Behaviour that listens to XMPP mesage that is sent from an agent when it is finished processing.
         Agent will communicate their status over XMPP. Deleberatelly stopped & finished agents share the same status.
 
         Ontology: APiScheduling
@@ -676,7 +680,6 @@ class APiHolon(APiCommunication):
         """
         Stop agents behaviour.
 
-        Behaviour that listens to XMPP mesage that is sent from an agent when it is finished setting up.
         Agent will communicate their status over XMPP. Deleberatelly stopped & finished agents share the same status.
 
         Ontology: APiScheduling
