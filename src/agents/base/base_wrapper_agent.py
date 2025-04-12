@@ -6,46 +6,44 @@ from requests.packages.urllib3.exceptions import InsecureRequestWarning
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
 import asyncio
-import aiofiles
-import aiohttp
-
-
-import websockets
-import nclib
-
-
 import os
-
+import shlex
+import subprocess as sp
+from copy import deepcopy
+from threading import Thread
 from time import sleep
 from uuid import uuid4
-import subprocess as sp
-import shlex
+
+import aiofiles
+import aiohttp
+import nclib
 import psutil
-from threading import Thread
-from copy import deepcopy
-from src.agents.base.base_talking_agent import APiTalkingAgent
-from src.utils.errors import (
-    APiCommunicationError,
-    APiAgentDefinitionError,
-    APiCallbackException,
-)
+import io
+import websockets
+
+from src.agents.base.base_communication import APiCommunication
 from src.utils.constants import (
     NIE,
-    http_re,
-    ws_re,
-    file_re,
-    time_re,
-    size_re,
     delimiter_re,
-    regex_re,
+    file_re,
+    http_re,
     netcat_re,
+    regex_re,
+    size_re,
+    time_re,
+    ws_re,
+)
+from src.utils.errors import (
+    APiAgentDefinitionError,
+    APiCallbackException,
+    APiCommunicationError,
 )
 from src.utils.logger import setup_logger
 
 logger = setup_logger("agent")
 
 
-class APiBaseWrapperAgent(APiTalkingAgent):
+class APiBaseWrapperAgent(APiCommunication):
     """
     Base wrapper agent implementing all input/output mappings (e.g. STDIN/STDOUT/STDERR,
     file, HTTP, WebSocket, Netcat). Not to be instanced by itself, but should be
@@ -64,7 +62,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
         self.input_channel_servers = {}
 
     # TODO: Sort methods / coroutines by type and write documentation
-    async def read_stdout(self, stdout):
+    async def read_stdout(self, stdout: io.TextIOWrapper) -> None:
         """
         Coroutine reading STDOUT and calling callback method.
         stdout - STDOUT file handle
@@ -77,11 +75,9 @@ class APiBaseWrapperAgent(APiTalkingAgent):
 
             if self.output_type == "STDOUT" and buf:
                 await self.output_callback(buf.decode())
-        await self.output_callback(
-            self.output_delimiter
-        )  # TODO: End of output? Verify this
+        await self.output_callback(self.output_delimiter)  # TODO: End of output? Verify this
 
-    async def read_stderr(self, stderr):
+    async def read_stderr(self, stderr: io.TextIOWrapper) -> None:
         """
         Coroutine reading STDERR and calling callback method.
         stderr - STDERR file handle
@@ -96,7 +92,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             if self.output_type == "STDERR":
                 await self.output_callback(buf.decode())
 
-    async def read_file(self, file_path):
+    async def read_file(self, file_path: str) -> None:
         """
         Coroutine reading file and calling callback method.
         file_path - file path to be read from
@@ -112,7 +108,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
                     file_empty = False
             await asyncio.sleep(0.1)
 
-    async def read_url(self, url):
+    async def read_url(self, url: str) -> None:
         """
         Coroutine reading URL and calling callback method.
         url - URL to be read from
@@ -135,7 +131,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
                 logger.error(f"Error reading url: {e}")
                 await asyncio.sleep(0.2)
 
-    async def read_ws(self, url):
+    async def read_ws(self, url: str) -> None:
         """
         Coroutine reading WebSocket and calling callback method.
         url - WS URL to be read from
@@ -152,9 +148,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
                             resp = await asyncio.wait_for(websocket.recv(), timeout=0.1)
                             logger.debug(f"Just read: {resp}")
                             if self.output_delimiter:
-                                res = [
-                                    i for i in resp.split(self.output_delimiter) if i
-                                ]
+                                res = [i for i in resp.split(self.output_delimiter) if i]
                             else:
                                 res = [resp]
                             for r in res:
@@ -171,7 +165,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
 
                 await asyncio.sleep(0.2)
 
-    async def read_nc(self, host, port, udp=False):
+    async def read_nc(self, host: str, port: int, udp: bool = False) -> None:
         """
         Method reading from NETCAT socket and calling callback method.
         host - host
@@ -207,7 +201,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
                 logger.error(f"Error reading nc: {e}")
                 error = True
 
-    async def write_stdin(self, stdin):
+    async def write_stdin(self, stdin: io.TextIOWrapper) -> None:
         """
         Coroutine writing to STDIN
         stdin - STDIN file handle
@@ -234,7 +228,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
                         break
         stdin.close()
 
-    def input_file(self, data):
+    def input_file(self, data: str) -> None:
         """
         File input method
         data - data to be written to file
@@ -258,7 +252,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
         # until the process has read the file.
         self.service_quit("Input file written, quitting!")
 
-    async def input_file_run(self, cmd):
+    async def input_file_run(self, cmd: str) -> None:
         """
         File to STDOUT/STDERR coroutine
         cmd - command to be started as service
@@ -270,11 +264,9 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
 
-        await asyncio.gather(
-            self.read_stderr(proc.stderr), self.read_stdout(proc.stdout)
-        )
+        await asyncio.gather(self.read_stderr(proc.stderr), self.read_stdout(proc.stdout))
 
-    def input_stdin(self, data):
+    def input_stdin(self, data: str) -> None:
         """
         STDIN input method
         data - data to be written to STDIN
@@ -295,7 +287,11 @@ class APiBaseWrapperAgent(APiTalkingAgent):
         if data == self.input_end:
             self.service_quit("Got end delimiter on STDIN, quitting!")
 
-    async def input_stdin_run(self, cmd):
+    async def input_stdin_run(self, cmd: str) -> None:
+        """
+        File to STDOUT/STDERR coroutine
+        cmd - command to be started as service
+        """
         while not self.all_setup():
             await asyncio.sleep(0.1)
         proc = await asyncio.create_subprocess_shell(
@@ -311,14 +307,24 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             self.write_stdin(proc.stdin),
         )
 
-    async def input_stdinfile_run(self, cmd, file_path):
+    async def input_stdinfile_run(self, cmd: str, file_path: str) -> None:
+        """
+        File to STDOUT/STDERR coroutine
+        cmd - command to be started as service
+        file_path - file path to be read from
+        """
         while not self.all_setup():
             await asyncio.sleep(0.1)
         proc = await asyncio.create_subprocess_shell(cmd, stdin=asyncio.subprocess.PIPE)
 
         await asyncio.gather(self.write_stdin(proc.stdin), self.read_file(file_path))
 
-    async def input_stdinhttp_run(self, cmd, url):
+    async def input_stdinhttp_run(self, cmd: str, url: str) -> None:
+        """
+        File to STDOUT/STDERR coroutine
+        cmd - command to be started as service
+        url - URL to be read from
+        """
         while not self.all_setup():
             await asyncio.sleep(0.1)
         proc = await asyncio.create_subprocess_shell(
@@ -340,7 +346,12 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             logger.error(f"Error killing process: {e}")
             pass
 
-    async def input_stdinws_run(self, cmd, url):
+    async def input_stdinws_run(self, cmd: str, url: str) -> None:
+        """
+        File to STDOUT/STDERR coroutine
+        cmd - command to be started as service
+        url - WS URL to be read from
+        """
         while not self.all_setup():
             await asyncio.sleep(0.1)
         proc = await asyncio.create_subprocess_shell(
@@ -362,7 +373,14 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             logger.error(f"Error killing process: {e}")
             pass
 
-    async def input_stdinnc_run(self, cmd, host, port, udp):
+    async def input_stdinnc_run(self, cmd: str, host: str, port: int, udp: bool) -> None:
+        """
+        File to STDOUT/STDERR coroutine
+        cmd - command to be started as service
+        host - host
+        port - port
+        udp=False - should NETCAT use UDP (if false, default is TCP)
+        """
         while not self.all_setup():
             await asyncio.sleep(0.1)
         proc = await asyncio.create_subprocess_shell(
@@ -384,14 +402,25 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             logger.error(f"Error killing process: {e}")
             pass
 
-    async def input_filefile_run(self, cmd, file_path):
+    async def input_filefile_run(self, cmd: str, file_path: str) -> None:
+        """
+        File to STDOUT/STDERR coroutine
+        cmd - command to be started as service
+        file_path - file path to be read from
+        """
         while not self.all_setup():
             await asyncio.sleep(0.1)
         await asyncio.create_subprocess_shell(cmd, stdin=asyncio.subprocess.PIPE)
 
         await asyncio.gather(self.read_file(file_path))
 
-    async def input_filehttp_run(self, cmd, file_path, url):
+    async def input_filehttp_run(self, cmd: str, file_path: str, url: str) -> None:
+        """
+        File to STDOUT/STDERR coroutine
+        cmd - command to be started as service
+        file_path - file path to be read from
+        url - URL to be read from
+        """
         while not self.all_setup():
             await asyncio.sleep(0.1)
         proc = await asyncio.create_subprocess_shell(
@@ -413,7 +442,13 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             logger.error(f"Error killing process: {e}")
             pass
 
-    async def input_filews_run(self, cmd, file_path, url):
+    async def input_filews_run(self, cmd: str, file_path: str, url: str) -> None:
+        """
+        File to STDOUT/STDERR coroutine
+        cmd - command to be started as service
+        file_path - file path to be read from
+        url - WS URL to be read from
+        """
         while not self.all_setup():
             await asyncio.sleep(0.1)
         proc = await asyncio.create_subprocess_shell(
@@ -435,7 +470,12 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             logger.error(f"Error killing process: {e}")
             pass
 
-    async def input_filenc_run(self, cmd, file_path):
+    async def input_filenc_run(self, cmd: str, file_path: str) -> None:
+        """
+        File to STDOUT/STDERR coroutine
+        cmd - command to be started as service
+        file_path - file path to be read from
+        """
         while not self.all_setup():
             await asyncio.sleep(0.1)
         proc = await asyncio.create_subprocess_shell(
@@ -456,16 +496,18 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             logger.error(f"Error killing process: {e}")
             pass
 
-    async def input_httpstdout_run(self, cmd):
+    async def input_httpstdout_run(self, cmd: str) -> None:
+        """
+        File to STDOUT/STDERR coroutine
+        cmd - command to be started as service
+        """
         while not self.all_setup():
             await asyncio.sleep(0.1)
         proc = await asyncio.create_subprocess_shell(
             cmd, stderr=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE
         )
 
-        await asyncio.gather(
-            self.read_stderr(proc.stderr), self.read_stdout(proc.stdout)
-        )
+        await asyncio.gather(self.read_stderr(proc.stderr), self.read_stdout(proc.stdout))
 
         try:
             pid = proc.pid
@@ -477,7 +519,12 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             logger.error(f"Error killing process: {e}")
             pass
 
-    async def input_httphttp_run(self, cmd, url):
+    async def input_httphttp_run(self, cmd: str, url: str) -> None:
+        """
+        File to STDOUT/STDERR coroutine
+        cmd - command to be started as service
+        url - URL to be read from
+        """
         while not self.all_setup():
             await asyncio.sleep(0.1)
         proc = await asyncio.create_subprocess_shell(
@@ -499,7 +546,12 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             logger.error(f"Error killing process: {e}")
             pass
 
-    async def input_httpfile_run(self, cmd, file_path):
+    async def input_httpfile_run(self, cmd: str, file_path: str) -> None:
+        """
+        File to STDOUT/STDERR coroutine
+        cmd - command to be started as service
+        file_path - file path to be read from
+        """
         while not self.all_setup():
             await asyncio.sleep(0.1)
         proc = await asyncio.create_subprocess_shell(cmd)
@@ -516,7 +568,12 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             logger.error(f"Error killing process: {e}")
             pass
 
-    async def input_httpws_run(self, cmd, url):
+    async def input_httpws_run(self, cmd: str, url: str) -> None:
+        """
+        File to STDOUT/STDERR coroutine
+        cmd - command to be started as service
+        url - WS URL to be read from
+        """
         while not self.all_setup():
             await asyncio.sleep(0.1)
         proc = await asyncio.create_subprocess_shell(cmd)
@@ -533,7 +590,11 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             logger.error(f"Error killing process: {e}")
             pass
 
-    async def input_httpnc_run(self, cmd):
+    async def input_httpnc_run(self, cmd: str) -> None:
+        """
+        File to STDOUT/STDERR coroutine
+        cmd - command to be started as service
+        """
         while not self.all_setup():
             await asyncio.sleep(0.1)
         proc = await asyncio.create_subprocess_shell(
@@ -556,7 +617,12 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             logger.error(f"Error killing process: {e}")
             pass
 
-    async def input_http(self, data, callback=False):
+    async def input_http(self, data: str, callback: bool = False) -> None:
+        """
+        File to STDOUT/STDERR coroutine
+        data - data to be sent to the service
+        callback - should the callback be used
+        """
         if self.input_value_type == "BINARY":
             data = data.encode("utf-8")
         if self.input_delimiter:
@@ -585,16 +651,18 @@ class APiBaseWrapperAgent(APiTalkingAgent):
                 self.service_quit("Received end delimiter, shutting down HTTP server!")
                 return
 
-    async def input_wsstdout_run(self, cmd):
+    async def input_wsstdout_run(self, cmd: str) -> None:
+        """
+        File to STDOUT/STDERR coroutine
+        cmd - command to be started as service
+        """
         while not self.all_setup():
             await asyncio.sleep(0.1)
         proc = await asyncio.create_subprocess_shell(
             cmd, stderr=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE
         )
 
-        await asyncio.gather(
-            self.read_stderr(proc.stderr), self.read_stdout(proc.stdout)
-        )
+        await asyncio.gather(self.read_stderr(proc.stderr), self.read_stdout(proc.stdout))
 
         try:
             pid = proc.pid
@@ -606,7 +674,12 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             logger.error(f"Error killing process: {e}")
             pass
 
-    async def input_wsfile_run(self, cmd, file_path):
+    async def input_wsfile_run(self, cmd: str, file_path: str) -> None:
+        """
+        File to STDOUT/STDERR coroutine
+        cmd - command to be started as service
+        file_path - file path to be read from
+        """
         while not self.all_setup():
             await asyncio.sleep(0.1)
         proc = await asyncio.create_subprocess_shell(cmd)
@@ -623,7 +696,12 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             logger.error(f"Error killing process: {e}")
             pass
 
-    async def input_wshttp_run(self, cmd, url):
+    async def input_wshttp_run(self, cmd: str, url: str) -> None:
+        """
+        File to STDOUT/STDERR coroutine
+        cmd - command to be started as service
+        url - URL to be read from
+        """
         while not self.all_setup():
             await asyncio.sleep(0.1)
         proc = await asyncio.create_subprocess_shell(
@@ -645,7 +723,12 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             logger.error(f"Error killing process: {e}")
             pass
 
-    async def input_wsws_run(self, cmd, url):
+    async def input_wsws_run(self, cmd: str, url: str) -> None:
+        """
+        File to STDOUT/STDERR coroutine
+        cmd - command to be started as service
+        url - WS URL to be read from
+        """
         while not self.all_setup():
             await asyncio.sleep(0.1)
         proc = await asyncio.create_subprocess_shell(
@@ -667,7 +750,11 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             logger.error(f"Error killing process: {e}")
             pass
 
-    async def input_wsnc_run(self, cmd):
+    async def input_wsnc_run(self, cmd: str) -> None:
+        """
+        File to STDOUT/STDERR coroutine
+        cmd - command to be started as service
+        """
         while not self.all_setup():
             await asyncio.sleep(0.1)
         proc = await asyncio.create_subprocess_shell(
@@ -690,7 +777,12 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             logger.error(f"Error killing process: {e}")
             pass
 
-    def input_ws(self, data, callback=False):
+    def input_ws(self, data: str, callback: bool = False) -> None:
+        """
+        File to STDOUT/STDERR coroutine
+        data - data to be sent to the service
+        callback - should the callback be used
+        """
         if self.input_value_type == "BINARY":
             data = data.encode("utf-8")
         if self.input_delimiter:
@@ -705,12 +797,15 @@ class APiBaseWrapperAgent(APiTalkingAgent):
                 loop = asyncio.new_event_loop()
             loop.run_until_complete(self.ws(i, callback))
             if i == self.input_end:
-                self.service_quit(
-                    "Received end delimiter, shutting down WebSocket server!"
-                )
+                self.service_quit("Received end delimiter, shutting down WebSocket server!")
                 return
 
-    async def ws(self, msg, callback=False):
+    async def ws(self, msg: str, callback: bool = False) -> None:
+        """
+        File to STDOUT/STDERR coroutine
+        msg - message to be sent to the service
+        callback - should the callback be used
+        """
         error = True
         while error:
             try:
@@ -729,7 +824,11 @@ class APiBaseWrapperAgent(APiTalkingAgent):
                 logger.error(f"Error ws: {e}")
                 sleep(0.2)
 
-    async def input_ncstdout_run(self, cmd):
+    async def input_ncstdout_run(self, cmd: str) -> None:
+        """
+        File to STDOUT/STDERR coroutine
+        cmd - command to be started as service
+        """
         while not self.all_setup():
             await asyncio.sleep(0.1)
 
@@ -737,9 +836,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             cmd, stderr=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE
         )
 
-        await asyncio.gather(
-            self.read_stderr(proc.stderr), self.read_stdout(proc.stdout)
-        )
+        await asyncio.gather(self.read_stderr(proc.stderr), self.read_stdout(proc.stdout))
 
         try:
             pid = proc.pid
@@ -751,7 +848,12 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             logger.error(f"Error killing process: {e}")
             pass
 
-    async def input_ncfile_run(self, cmd, file_path):
+    async def input_ncfile_run(self, cmd: str, file_path: str) -> None:
+        """
+        File to STDOUT/STDERR coroutine
+        cmd - command to be started as service
+        file_path - file path to be read from
+        """
         while not self.all_setup():
             await asyncio.sleep(0.1)
         proc = await asyncio.create_subprocess_shell(cmd)
@@ -768,7 +870,12 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             logger.error(f"Error killing process: {e}")
             pass
 
-    async def input_nchttp_run(self, cmd, url):
+    async def input_nchttp_run(self, cmd: str, url: str) -> None:
+        """
+        File to STDOUT/STDERR coroutine
+        cmd - command to be started as service
+        url - URL to be read from
+        """
         while not self.all_setup():
             await asyncio.sleep(0.1)
         proc = await asyncio.create_subprocess_shell(
@@ -790,7 +897,12 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             logger.error(f"Error killing process: {e}")
             pass
 
-    async def input_ncws_run(self, cmd, url):
+    async def input_ncws_run(self, cmd: str, url: str) -> None:
+        """
+        File to STDOUT/STDERR coroutine
+        cmd - command to be started as service
+        url - WS URL to be read from
+        """
         while not self.all_setup():
             await asyncio.sleep(0.1)
         proc = await asyncio.create_subprocess_shell(cmd)
@@ -807,7 +919,11 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             logger.error(f"Error killing process: {e}")
             pass
 
-    async def input_ncnc_run(self, cmd):
+    async def input_ncnc_run(self, cmd: str) -> None:
+        """
+        File to STDOUT/STDERR coroutine
+        cmd - command to be started as service
+        """
         while not self.all_setup():
             await asyncio.sleep(0.1)
         proc = await asyncio.create_subprocess_shell(
@@ -830,7 +946,12 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             logger.error(f"Error killing process: {e}")
             pass
 
-    async def input_nc(self, data, callback=False):
+    async def input_nc(self, data: str, callback: bool = False) -> None:
+        """
+        File to STDOUT/STDERR coroutine
+        data - data to be sent to the service
+        callback - should the callback be used
+        """
         if self.input_value_type == "BINARY":
             data = data.encode("utf-8")
         if data == self.input_end:
@@ -849,9 +970,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
                     result = self.nc_client.read(timeout=1).decode("utf-8")
                     if result:
                         if self.output_delimiter:
-                            result = [
-                                j for j in result.split(self.output_delimiter) if j
-                            ]
+                            result = [j for j in result.split(self.output_delimiter) if j]
                         else:
                             result = [result]
                         for j in result:
@@ -863,17 +982,19 @@ class APiBaseWrapperAgent(APiTalkingAgent):
                 self.service_quit("NETCAT process ended, quitting!")
                 return None
 
-    def output_callback(self, data):
+    def output_callback(self, data: str) -> None:
+        """
+        File to STDOUT/STDERR coroutine
+        data - data to be sent to the service
+        """
         err = "Trying to call output_callback directly from APiBaseAgent. This method should be overriden!"
         raise APiCallbackException(err)
 
-    def service_start(self):
+    def service_start(self) -> None:
         """
         Start main thread dealing with service input/output.
         """
-        service_quit_thread = Thread(
-            target=asyncio.run, args=(self.service_quit_run(),)
-        )
+        service_quit_thread = Thread(target=asyncio.run, args=(self.service_quit_run(),))
         service_quit_thread.start()
 
         try:
@@ -943,7 +1064,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             logger.error(f"Error starting threads: {e}")
             pass
 
-    def service_quit(self, msg=""):
+    def service_quit(self, msg: str = "") -> None:
         """
         Service quitting and clean up method. Joins all threads and
         kills all running processes (services).
@@ -951,10 +1072,13 @@ class APiBaseWrapperAgent(APiTalkingAgent):
         msg - optional message (more or less for debug purposes)
         """
 
-        self.say(msg)  # firstly need to clean up and finish all threads
+        logger.debug(msg)  # firstly need to clean up and finish all threads
         self.input_ended = True
 
-    async def service_quit_run(self):
+    async def service_quit_run(self) -> None:
+        """
+        File to STDOUT/STDERR coroutine
+        """
         while not self.input_ended:
             await asyncio.sleep(0.1)
 
@@ -1050,7 +1174,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
 
         await self.schedule_message(self.holon, metadata=metadata)
 
-    def process_descriptor(self):
+    def process_descriptor(self) -> None:
         """
         Agent descriptor processor (the heart of the agent). Processes
         the agent description (as loaded with self._load) and connects
@@ -1173,11 +1297,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
 
             self.stdinnc_thread = Thread(
                 target=asyncio.run,
-                args=(
-                    self.input_stdinnc_run(
-                        self.cmd, self.nc_host, self.nc_port, self.nc_udp
-                    ),
-                ),
+                args=(self.input_stdinnc_run(self.cmd, self.nc_host, self.nc_port, self.nc_udp),),
             )
             # self.stdinnc_thread.start()
             self.stdinncrec_thread = Thread(
@@ -1215,11 +1335,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             self.output_url = url
             self.filehttp_thread = Thread(
                 target=asyncio.run,
-                args=(
-                    self.input_filehttp_run(
-                        self.cmd, self.input_file_path, self.output_url
-                    ),
-                ),
+                args=(self.input_filehttp_run(self.cmd, self.input_file_path, self.output_url),),
             )
             # self.filehttp_thread.start()
 
@@ -1232,11 +1348,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             self.output_url = url
             self.filews_thread = Thread(
                 target=asyncio.run,
-                args=(
-                    self.input_filews_run(
-                        self.cmd, self.input_file_path, self.output_url
-                    ),
-                ),
+                args=(self.input_filews_run(self.cmd, self.input_file_path, self.output_url),),
             )
             # self.filews_thread.start()
 
@@ -1321,9 +1433,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             self.nc_udp = udp != ""
             self.input = self.input_http
 
-            self.httpnc_thread = Thread(
-                target=asyncio.run, args=(self.input_httpnc_run(self.cmd),)
-            )
+            self.httpnc_thread = Thread(target=asyncio.run, args=(self.input_httpnc_run(self.cmd),))
             # self.httpnc_thread.start()
             self.httpncrec_thread = Thread(
                 target=self.read_nc, args=(self.nc_host, self.nc_port, self.nc_udp)
@@ -1393,9 +1503,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             self.nc_port = int(port)
             self.nc_udp = udp != ""
 
-            self.wsnc_thread = Thread(
-                target=asyncio.run, args=(self.input_wsnc_run(self.cmd),)
-            )
+            self.wsnc_thread = Thread(target=asyncio.run, args=(self.input_wsnc_run(self.cmd),))
             # self.wsnc_thread.start()
             self.wsncrec_thread = Thread(
                 target=self.read_nc, args=(self.nc_host, self.nc_port, self.nc_udp)
@@ -1420,9 +1528,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             error = True
             while error:
                 try:
-                    self.nc_client = nclib.Netcat(
-                        (self.nc_host, self.nc_port), udp=self.nc_udp
-                    )
+                    self.nc_client = nclib.Netcat((self.nc_host, self.nc_port), udp=self.nc_udp)
                     error = False
                 except Exception as e:
                     logger.error(f"Error creating nc client: {e}")
@@ -1450,9 +1556,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             error = True
             while error:
                 try:
-                    self.nc_client = nclib.Netcat(
-                        (self.nc_host, self.nc_port), udp=self.nc_udp
-                    )
+                    self.nc_client = nclib.Netcat((self.nc_host, self.nc_port), udp=self.nc_udp)
                     error = False
                 except Exception as e:
                     logger.error(f"Error creating nc client: {e}")
@@ -1476,9 +1580,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             error = True
             while error:
                 try:
-                    self.nc_client = nclib.Netcat(
-                        (self.nc_host, self.nc_port), udp=self.nc_udp
-                    )
+                    self.nc_client = nclib.Netcat((self.nc_host, self.nc_port), udp=self.nc_udp)
                     error = False
                 except Exception as e:
                     logger.error(f"Error creating nc client: {e}")
@@ -1502,9 +1604,7 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             error = True
             while error:
                 try:
-                    self.nc_client = nclib.Netcat(
-                        (self.nc_host, self.nc_port), udp=self.nc_udp
-                    )
+                    self.nc_client = nclib.Netcat((self.nc_host, self.nc_port), udp=self.nc_udp)
                     error = False
                 except Exception as e:
                     logger.error(f"Error creating nc client: {e}")
@@ -1522,18 +1622,14 @@ class APiBaseWrapperAgent(APiTalkingAgent):
             self.nc_udp_output = oudp != ""
 
             if (host, port, udp) == (ohost, oport, oudp):
-                self.nc_proc = sp.Popen(
-                    shlex.split(self.cmd), stdout=sp.PIPE, stderr=sp.DEVNULL
-                )
+                self.nc_proc = sp.Popen(shlex.split(self.cmd), stdout=sp.PIPE, stderr=sp.DEVNULL)
                 sleep(0.1)
                 self.input = lambda data: self.input_nc(data, callback=True)
 
                 error = True
                 while error:
                     try:
-                        self.nc_client = nclib.Netcat(
-                            (self.nc_host, self.nc_port), udp=self.nc_udp
-                        )
+                        self.nc_client = nclib.Netcat((self.nc_host, self.nc_port), udp=self.nc_udp)
                         error = False
                     except Exception as e:
                         logger.error(f"Error creating nc client: {e}")
@@ -1541,17 +1637,13 @@ class APiBaseWrapperAgent(APiTalkingAgent):
 
             else:
                 self.input = self.input_nc
-                self.ncnc_thread = Thread(
-                    target=asyncio.run, args=(self.input_ncnc_run(self.cmd),)
-                )
+                self.ncnc_thread = Thread(target=asyncio.run, args=(self.input_ncnc_run(self.cmd),))
                 # self.ncnc_thread.start()
 
                 error = True
                 while error:
                     try:
-                        self.nc_client = nclib.Netcat(
-                            (self.nc_host, self.nc_port), udp=self.nc_udp
-                        )
+                        self.nc_client = nclib.Netcat((self.nc_host, self.nc_port), udp=self.nc_udp)
 
                         error = False
                     except Exception as e:

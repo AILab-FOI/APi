@@ -1,17 +1,24 @@
-from src.agents.base.base_channel_agent import APiBaseChannel
+import argparse
+import asyncio
 import json
 import time
-import argparse
-from threading import Thread
 from copy import deepcopy
-import asyncio
+from threading import Thread
+
 import nclib
 from spade.behaviour import CyclicBehaviour
 from spade.template import Template
 
+from src.agents.base.base_channel import APiBaseChannel
+from src.utils.logger import setup_logger
+
+logger = setup_logger("environment")
+
 
 class APiEnvironment(APiBaseChannel):
-    """Environment agent."""
+    """
+    Environment.
+    """
 
     def __init__(
         self,
@@ -28,9 +35,7 @@ class APiEnvironment(APiBaseChannel):
         output=None,
     ):
         # revert and pass proper input & output
-        super().__init__(
-            channelname, name, password, holon, token, portrange, input, output
-        )
+        super().__init__(channelname, name, password, holon, token, portrange, input, output)
         # used for external agents that will communicate with holon / environment
         self.input_attach_servers = []
         self.output_attach_servers = []
@@ -96,7 +101,11 @@ class APiEnvironment(APiBaseChannel):
         )
         self.output_subscribe_cli_socket.start()
 
-    def send_to_subscribed_agents(self, sub_type, msg):
+    def send_to_subscribed_agents(self, sub_type: str, msg: bytes) -> None:
+        """
+        Send message to subscribed agents.
+        """
+
         socket_clients = (
             self.socket_clients["input_subscribe_socket_clients"]
             if sub_type == "input"
@@ -118,14 +127,18 @@ class APiEnvironment(APiBaseChannel):
                 try:
                     client.sendline(msg)
                 except Exception as ex:
-                    print("Run into error sending a msg over socket", ex)
+                    logger.info("Run into error sending a msg over socket", ex)
                     closed_clients.append(idx)
 
             # remove closed sockets -- might have to deal with concurrency
             # for idx in closed_clients:
             # del self.socket_clients[idx]
 
-    def get_subscribe_server(self, sub_type, protocol):
+    def get_subscribe_server(self, sub_type: str, protocol: str) -> tuple[str, str, int, str]:
+        """
+        Get subscribe server.
+        """
+
         instance = (
             self.input_subscribe_socket_server
             if sub_type == "input"
@@ -139,7 +152,11 @@ class APiEnvironment(APiBaseChannel):
 
         return srv, ip, port, protocol
 
-    def get_attach_server(self, att_type, protocol):
+    def get_attach_server(self, att_type: str, protocol: str) -> tuple[str, str, int, str]:
+        """
+        Get attach server.
+        """
+
         srv, host, port, protocol = self.get_server(protocol)
 
         if att_type == "input":
@@ -150,13 +167,15 @@ class APiEnvironment(APiBaseChannel):
         return srv, host, port, protocol
 
     class Subscribe(CyclicBehaviour):
-        """Agent wants to listen or write to channel"""
+        """
+        Agent wants to listen or write to channel
+        """
 
         async def run(self):
             msg = await self.receive(timeout=0.1)
             if msg:
                 if self.agent.verify(msg):
-                    self.agent.say("(Subscribe) Message verified, processing ...")
+                    logger.debug("(Subscribe) Message verified, processing ...")
                     metadata = deepcopy(self.agent.agree_message_template)
                     metadata["in-reply-to"] = msg.metadata["reply-with"]
                     # subscribing to environment input
@@ -166,7 +185,7 @@ class APiEnvironment(APiBaseChannel):
                         _, ip, port, protocol = self.agent.get_subscribe_server(
                             "input", self.agent.input_protocol
                         )
-                        print("ADDED input subscribe server", ip, port)
+                        logger.info("ADDED input subscribe server", ip, port)
                     # subscribing to environment output
                     elif msg.metadata["performative"] == "subscribe_to_output":
                         metadata["agent"] = "ENV_OUTPUT"
@@ -174,7 +193,7 @@ class APiEnvironment(APiBaseChannel):
                         _, ip, port, protocol = self.agent.get_subscribe_server(
                             "output", self.agent.output_protocol
                         )
-                        print("ADDED output subscribe server", ip, port)
+                        logger.info("ADDED output subscribe server", ip, port)
                     # attaching to environment output
                     elif msg.metadata["performative"] == "request_to_input":
                         metadata["agent"] = "ENV_INPUT"
@@ -182,22 +201,20 @@ class APiEnvironment(APiBaseChannel):
                         _, ip, port, protocol = self.agent.get_attach_server(
                             "input", self.agent.input_protocol
                         )
-                        print("ADDED input attach server", ip, port)
+                        logger.info("ADDED input attach server", ip, port)
                     elif msg.metadata["performative"] == "request_to_output":
                         metadata["agent"] = "ENV_OUTPUT"
                         metadata["type"] = "output"
                         _, ip, port, protocol = self.agent.get_attach_server(
                             "output", self.agent.output_protocol
                         )
-                        print("ADDED output attach server", ip, port)
+                        logger.info("ADDED output attach server", ip, port)
                     else:
-                        self.agent.say("Unknown message")
+                        logger.debug("Unknown message")
                         metadata = self.agent.refuse_message_template
                         metadata["in-reply-to"] = msg.metadata["reply-with"]
                         metadata["reason"] = "unknown-message"
-                        await self.agent.schedule_message(
-                            str(msg.sender), metadata=metadata
-                        )
+                        await self.agent.schedule_message(str(msg.sender), metadata=metadata)
 
                     if msg.metadata.get("external", "") == "True":
                         metadata["agent"] = self.agent.holon_name
@@ -205,31 +222,33 @@ class APiEnvironment(APiBaseChannel):
                     metadata["server"] = ip
                     metadata["port"] = port
                     metadata["protocol"] = protocol
-                    await self.agent.schedule_message(
-                        str(msg.sender), metadata=metadata
-                    )
+                    await self.agent.schedule_message(str(msg.sender), metadata=metadata)
                     await asyncio.sleep(0.1)
                 else:
-                    self.agent.say("Message could not be verified. IMPOSTER!!!!!!")
+                    logger.debug("Message could not be verified. IMPOSTER!!!!!!")
                     metadata = self.agent.refuse_message_template
                     metadata["in-reply-to"] = msg.metadata["reply-with"]
                     metadata["reason"] = "security-policy"
-                    await self.agent.schedule_message(
-                        str(msg.sender), metadata=metadata
-                    )
+                    await self.agent.schedule_message(str(msg.sender), metadata=metadata)
 
     class Forward(CyclicBehaviour):
-        def __init__(self, sub_type, attach_servers):
+        """
+        Forward behaviour.
+        """
+
+        def __init__(self, sub_type: str, attach_servers: list) -> None:
             super().__init__()
             self.sub_type = sub_type
             self.attach_servers = attach_servers
             self.protocol = (
-                self.agent.input_protocol
-                if sub_type == "input"
-                else self.agent.output_protocol
+                self.agent.input_protocol if sub_type == "input" else self.agent.output_protocol
             )
 
-        async def run(self):
+        async def run(self) -> None:
+            """
+            Listen for incoming connections and messages.
+            """
+
             def iter_clients(srv):
                 if self.protocol == "udp":
                     yield srv
@@ -242,7 +261,7 @@ class APiEnvironment(APiBaseChannel):
                         for client in srv:
                             yield client
                     except Exception as e:
-                        print("Error accepting client", e)
+                        logger.info("Error accepting client", e)
                         return
 
             # Slusaju se poruke od svih agenata koji su attached, te je ovo cyclic behv jer
@@ -252,30 +271,30 @@ class APiEnvironment(APiBaseChannel):
                 for srv in self.attach_servers:
                     srv.sock.settimeout(0.1)
                     for client in iter_clients(srv):
-                        self.agent.say("CLIENT", client, srv.addr)
+                        logger.debug("CLIENT", client, srv.addr)
                         # TODO should put in a method instead
                         if self.protocol == "udp":
                             result = None
                             try:
                                 result, _ = client.sock.recvfrom(1024)
                             except Exception as e:
-                                print("Error receiving from client", e)
+                                logger.info("Error receiving from client", e)
                                 pass
                         else:
-                            result = client.recv_until(
-                                self.agent.delimiter, timeout=0.1
-                            )
-                        self.agent.say("RESULT", result, srv.addr)
+                            result = client.recv_until(self.agent.delimiter, timeout=0.1)
+                        logger.debug("RESULT", result, srv.addr)
                         if result:
-                            self.agent.say("MAPPING RESULT", result.decode(), srv.addr)
+                            logger.debug("MAPPING RESULT", result.decode(), srv.addr)
                             msg = self.agent.map(result.decode())
-                            self.agent.say("MSG", msg, srv.addr)
+                            logger.debug("MSG", msg, srv.addr)
 
-                            self.agent.send_to_subscribed_agents(
-                                self.sub_type, msg.encode()
-                            )
+                            self.agent.send_to_subscribed_agents(self.sub_type, msg.encode())
 
-    async def setup(self):
+    async def setup(self) -> None:
+        """
+        Setup the environment.
+        """
+
         super().setup()
 
         bsl = self.StatusListening()
@@ -293,17 +312,17 @@ class APiEnvironment(APiBaseChannel):
 
 
 def main(
-    name,
-    address,
-    password,
-    holon,
-    holon_name,
-    token,
-    portrange,
-    input_protocol,
-    output_protocol,
-    input,
-    output,
+    name: str,
+    address: str,
+    password: str,
+    holon: str,
+    holon_name: str,
+    token: str,
+    portrange: str,
+    input_protocol: str,
+    output_protocol: str,
+    input: str,
+    output: str,
 ):
     portrange = json.loads(portrange)
     input = None if input == "null" else input
@@ -335,15 +354,11 @@ def main(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="APi agent.")
-    parser.add_argument(
-        "name", metavar="NAME", type=str, help="Environment's local APi name"
-    )
+    parser.add_argument("name", metavar="NAME", type=str, help="Environment's local APi name")
     parser.add_argument(
         "address", metavar="ADDRESS", type=str, help="Environment's XMPP/JID address"
     )
-    parser.add_argument(
-        "password", metavar="PWD", type=str, help="Environment's XMPP/JID password"
-    )
+    parser.add_argument("password", metavar="PWD", type=str, help="Environment's XMPP/JID password")
     parser.add_argument(
         "holon",
         metavar="HOLON",
@@ -356,12 +371,8 @@ if __name__ == "__main__":
         type=str,
         help="Agent's instantiating holon's name",
     )
-    parser.add_argument(
-        "token", metavar="TOKEN", type=str, help="Environment's security token"
-    )
-    parser.add_argument(
-        "portrange", metavar="PORTRANGE", type=str, help="Environment's port range"
-    )
+    parser.add_argument("token", metavar="TOKEN", type=str, help="Environment's security token")
+    parser.add_argument("portrange", metavar="PORTRANGE", type=str, help="Environment's port range")
     parser.add_argument(
         "input_protocol",
         metavar="INPUT_PROTOCOL",

@@ -1,24 +1,27 @@
-import socket
 import argparse
+import socket
 import sys
 from time import sleep
 
+from src.utils.logger import setup_logger
+
+logger = setup_logger("APishc")
 
 BUFFER_SIZE = 4096
 
 
-def write(data, stderr=False):
+def write(data: str, stderr: bool = False) -> None:
     """
     Print without newline. If stderr is True print to sys.stderr
     instead to sys.stdout.
     """
     if stderr:
-        print(data, file=sys.stderr, end="")
+        logger.debug(data, file=sys.stderr, end="")
     else:
-        print(data, end="")
+        logger.debug(data, end="")
 
 
-def stdin(host, port):
+def stdin(host: str, port: int) -> None:
     """
     Send to agent's stdin via socket on ( host, port ). Works
     as a shell.
@@ -42,11 +45,11 @@ def stdin(host, port):
             s.send(inp.encode())
         except Exception as e:
             if e.errno == 107:  # Agent disconnected
-                print("Error, agent has disconnected!")
+                logger.debug("Error, agent has disconnected!")
                 break
 
 
-def out(host, port, write_error=False):
+def out(host: str, port: int, write_error: bool = False) -> None:
     """
     Write data from agent's stdout via socket on ( host, port ).
     If write_error is True, write to sys.stderr instead of sys.stdout.
@@ -67,13 +70,19 @@ def out(host, port, write_error=False):
                 break
         except Exception as e:
             sleep(0.1)
-            print("Error in out", e)
+            logger.debug("Error in out", e)
             if e.errno == 107:  # Agent disconnected
-                print("Error, agent has disconnected!")
+                logger.debug("Error, agent has disconnected!")
                 break
 
 
-def main(host, port, provide_input=True, write_output=True, write_error=False):
+def main(
+    host: str,
+    port: int,
+    provide_input: bool = True,
+    write_output: bool = True,
+    write_error: bool = False,
+) -> None:
     """
     Main client's function. Start appropriate function based on
     given input params.

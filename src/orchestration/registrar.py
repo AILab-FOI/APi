@@ -1,12 +1,12 @@
 from itertools import cycle
-from src.utils.errors import APiIOError, APiHolonConfigurationError
-from src.config.settings import settings
-
 from uuid import uuid4
 
+from src.config.settings import settings
+from src.utils.errors import APiHolonConfigurationError, APiIOError
 
 try:
-    from yaml import CLoader as Loader, load
+    from yaml import CLoader as Loader
+    from yaml import load
 except ImportError:
     from yaml import Loader, load
 
@@ -28,14 +28,9 @@ class APiRegistrationService:
         self.mas_name = mas_name
 
         try:
-            fh = open(
-                "mas_configuration/"
-                + _CONFIG_FILE_NAME_TEMPLATE.format(file_name=mas_name)
-            )
+            fh = open("mas_configuration/" + _CONFIG_FILE_NAME_TEMPLATE.format(file_name=mas_name))
         except IOError as e:
-            raise APiIOError(
-                "Missing holon configuration file or permission issue.\n" + str(e)
-            )
+            raise APiIOError("Missing holon configuration file or permission issue.\n" + str(e))
 
         self.services = []
         self._load(fh)

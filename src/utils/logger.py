@@ -2,6 +2,9 @@ import logging
 
 
 def setup_logger(name: str):
+    """
+    Setup the logger for the given name.
+    """
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
 

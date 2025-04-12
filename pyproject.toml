@@ -9,7 +9,7 @@ readme = "README.md"
 python = "3.8.17"
 Click = "7.0"
 Flask = "1.1.1"
-PyYAML = "3.13"
+PyYAML = "6.0"
 aiodebug = "1.1.2"
 aiofiles = "0.6.0"
 antlr4-python3-runtime = "4.13.0"
@@ -25,9 +25,27 @@ aiohttp = "3.7.4.post0"
 pydantic = "^2.10.6"
 pydantic-settings = "^2.7.1"
 
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.3.5"
+pre-commit = "2.21.0"
+
 [tool.poetry.scripts]
 post_install = "post_install:main"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 100
+target-version = "py38"
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["E501"]  
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"

@@ -2,6 +2,10 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
+    """
+    Settings for the orchestration.
+    """
+
     xmpp_host: str
     examples_dir: str
 

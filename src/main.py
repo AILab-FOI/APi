@@ -1,14 +1,20 @@
-import sys
 import os
+import sys
+
+import spade
+from antlr4 import CommonTokenStream, FileStream, ParseTreeWalker, StdinStream
 
 from src.agents.holon import APiHolon
-from src.grammar.listener import APi
+from src.config.settings import settings
 from src.grammar.APiLexer import APiLexer
 from src.grammar.APiParser import APiParser
+from src.grammar.listener import APi
+from src.models.namespace import APiNamespace
 from src.orchestration.registrar import APiRegistrationService
-from src.config.settings import settings
-from antlr4 import CommonTokenStream, ParseTreeWalker, StdinStream, FileStream
-import spade
+from src.utils.logger import setup_logger
+
+logger = setup_logger("main")
+
 
 _ORCHESTRATION_FILE_NAME_TEMPLATE = "{file_name}.api"
 
@@ -24,7 +30,11 @@ Awkward π-nguin : Microservice orchestration language
 """
 
 
-def process(lexer):
+def process(lexer: APiLexer) -> APiNamespace:
+    """
+    Process the lexer and return the namespace.
+    """
+
     lexer.recover = lambda x: sys.exit()
     stream = CommonTokenStream(lexer)
     parser = APiParser(stream)
@@ -36,19 +46,28 @@ def process(lexer):
     return printer.get_ns()
 
 
-def read_from_stdin():
-    print(SPLASH)
+def read_from_stdin() -> APiNamespace:
+    """
+    Read from stdin and process the lexer.
+    """
+    logger.info(SPLASH)
     lexer = APiLexer(StdinStream())
     return process(lexer)
 
 
-def read_specification_from_file(fl):
+def read_specification_from_file(fl: str) -> APiNamespace:
+    """
+    Read from file and process the lexer.
+    """
     stream = FileStream(fl, encoding="utf-8")
     lexer = APiLexer(stream)
     return process(lexer)
 
 
-def read_specification_files_recursively(fl, spec_by_holon={}):
+def read_specification_files_recursively(fl: str, spec_by_holon: dict = {}) -> dict:
+    """
+    Read the specification files recursively.
+    """
     hn = fl.replace(".api", "")
     ns = read_specification_from_file(fl)
     hn = hn.replace("orchestration_specifications/", "")
@@ -65,25 +84,35 @@ def read_specification_files_recursively(fl, spec_by_holon={}):
     return spec_by_holon
 
 
-def generate_namespaces(configuration_name: str):
+def generate_namespaces(configuration_name: str) -> dict:
+    """
+    Generate namespaces from the configuration name.
+    """
     file_name = _ORCHESTRATION_FILE_NAME_TEMPLATE.format(file_name=configuration_name)
     file_name = "orchestration_specifications/" + file_name
     return read_specification_files_recursively(file_name)
 
 
-def extract_orchestration_specification_name():
+def extract_orchestration_specification_name() -> str:
+    """
+    Extract the orchestration specification name from the command line arguments.
+    """
     if len(sys.argv) > 2:
-        print("Usage: APi [filename.api]")
+        logger.info("Usage: APi [filename.api]")
     else:
         if len(sys.argv) == 2:
             file_name = sys.argv[1]
             splits = file_name.split(".")
             return splits[0]
         else:
-            print("Not supported at this time")
+            logger.info("Not supported at this time")
+            return None
 
 
 if __name__ == "__main__":
+    """
+    Main function to start the orchestration.
+    """
     # set working directory to test folder
     os.chdir(settings.examples_dir)
 

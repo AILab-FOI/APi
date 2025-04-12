@@ -27,8 +27,13 @@ Within this setup, there is an example on how to run APi that starts up dockeriz
 
 1. Positionate to `docker` directory which will be used to build a new image that will contain a file to be read
 2. Run `docker build -t api_docker_example .` which will build the image
-3. Run APi as with unix approach `poetry run python3 src/main.py docker.api` -- it is a specificaiton that uses the dockerized agent
+3. Create a copy of `.env.sample`, name it `.env` and adjust values accordingly
+4. Run APi as with unix approach `poetry run python3 src/main.py docker.api` -- it is a specificaiton that uses the dockerized agent
 
 Similarily, you can create your own docker container, which communicates via STDINT / STDOUT and use it.
+
+## Ruff
+
+`poetry run ruff check src --fix`
 
 This work has been supported in full by the Croatian Science Foundation under the project number [IP-2019-04-5824](http://dragon.foi.hr:8888/ohai4games).

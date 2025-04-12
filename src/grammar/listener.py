@@ -1,7 +1,6 @@
-from src.models.namespace import APiNamespace
 from src.grammar.APiListener import APiListener
 from src.grammar.APiParser import APiParser
-# from antlr4 import *
+from src.models.namespace import APiNamespace
 
 
 class APi(APiListener):

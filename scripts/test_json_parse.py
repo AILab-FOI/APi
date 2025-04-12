@@ -2,7 +2,7 @@ import re
 from pyxf.pyxf import swipl
 
 
-def main(input_json: str, data: str):
+def main(input_json: str, data: str) -> None:
     var_re = re.compile(r"[\?][a-zA-Z][a-zA-Z0-9-_]*")
     REPL_STR = '"$$$API_THIS_IS_VARIABLE_%s$$$"'
     kb = swipl()
