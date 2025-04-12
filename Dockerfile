@@ -8,7 +8,7 @@ RUN apt-get update && \
 
 RUN curl -sSL https://get.docker.com/ | sh
 
+COPY . .
 RUN pip3 install poetry
-COPY install.sh install.sh
 RUN chmod +x install.sh
-RUN install.sh
+RUN ./install.sh

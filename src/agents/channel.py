@@ -11,6 +11,7 @@ from spade.template import Template
 
 from src.agents.base.base_channel import APiBaseChannel
 from src.utils.logger import setup_logger
+from typing import Tuple
 
 logger = setup_logger("channel")
 
@@ -27,7 +28,7 @@ class APiChannel(APiBaseChannel):
         password: str,
         holon: str,
         token: str,
-        portrange: str,
+        portrange: Tuple[int, int],
         protocol: str,
         channel_input: str = None,
         channel_output: str = None,
@@ -106,7 +107,7 @@ class APiChannel(APiBaseChannel):
             # for idx in closed_clients:
             # del self.socket_clients['subscribe][idx]
 
-    def get_subscribe_server(self, protocol: str) -> tuple[str, str, int, str]:
+    def get_subscribe_server(self, protocol: str) -> Tuple[str, str, int, str]:
         """
         Get subscribe server.
         """
@@ -120,7 +121,7 @@ class APiChannel(APiBaseChannel):
 
         return srv, ip, port, protocol
 
-    def get_attach_server(self, protocol: str) -> tuple[str, str, int, str]:
+    def get_attach_server(self, protocol: str) -> Tuple[str, str, int, str]:
         """
         Get attach server.
         """
@@ -214,9 +215,16 @@ class APiChannel(APiBaseChannel):
                         if result:
                             logger.info(f"Mapping result: {result}")
                             msg = self.agent.map(result.decode())
+                            print("msasdg", result.decode())
                             logger.info(f"Sending msg: {msg}")
 
-                            self.agent.send_to_subscribed_agents(msg.encode())
+                            if msg:
+                                print("sendingggg")
+                                print("sendingggg")
+                                print("sendingggg")
+                                print("sendingggg")
+                                print("sendingggg")
+                                self.agent.send_to_subscribed_agents(msg.encode())
 
     async def setup(self) -> None:
         """

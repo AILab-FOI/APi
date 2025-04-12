@@ -14,6 +14,7 @@ from src.agents.tools.execution_plan import resolve_execution_plan
 from src.models.namespace import APiNamespace
 from src.orchestration.registrar import APiRegistrationService
 from src.utils.logger import setup_logger
+from typing import Dict, List
 
 logger = setup_logger("holon")
 
@@ -87,14 +88,14 @@ class APiHolon(APiCommunication):
         self.confirm_message_template["ontology"] = "APiScheduling"
         self.confirm_message_template["auth-token"] = self.auth
 
-    def create_agent_types_map(self, agent: dict) -> None:
+    def create_agent_types_map(self, agent: Dict) -> None:
         """
         Create a map of agent types.
         """
 
         self.agent_types[agent["name"]] = agent
 
-    def adjust_flows_by_args(self, agent_args: list, agent_params: list, flows: list) -> list:
+    def adjust_flows_by_args(self, agent_args: List, agent_params: List, flows: List) -> List:
         """
         Adjust flows by arguments.
         """
@@ -117,7 +118,7 @@ class APiHolon(APiCommunication):
         return adjusted_flows
 
     def setup_agent(
-        self, agent_type: str, id: str = None, plan_id: str = None, params: list = None
+        self, agent_type: str, id: str = None, plan_id: str = None, params: List = None
     ) -> None:
         """
         Setup an agent.
@@ -127,7 +128,7 @@ class APiHolon(APiCommunication):
             id = uuid4().hex
 
         agent = deepcopy(self.agent_types[agent_type])
-        logger.debug("Registering agent", agent["name"])
+        logger.debug(f"Registering agent {agent['name']}")
         address, password = self.registrar.register(agent["name"])
         if params:
             flows = self.adjust_flows_by_args(agent["args"], params, agent["flows"])
@@ -154,13 +155,13 @@ class APiHolon(APiCommunication):
         agent["plan_id"] = plan_id
         self.agents[id] = agent
 
-    def setup_channel(self, channel: dict) -> None:
+    def setup_channel(self, channel: Dict) -> None:
         """
         Setup a channel.
         """
 
         address, password = self.registrar.register(channel["name"])
-        logger.debug("Registering channel", channel["name"])
+        logger.debug(f"Registering channel {channel['name']}")
 
         # NOTE: This should be updated if channel.py is moved around
         channel["cmd"] = (
@@ -181,7 +182,7 @@ class APiHolon(APiCommunication):
         channel["status"] = "setup"
         self.channels[channel["name"]] = channel
 
-    def setup_environment(self, env: dict) -> None:
+    def setup_environment(self, env: Dict) -> None:
         """
         Setup an environment.
         """
@@ -211,7 +212,7 @@ class APiHolon(APiCommunication):
         environment["status"] = "setup"
         self.environment = environment
 
-    def setup_execution(self, execution_plans: list) -> None:
+    def setup_execution(self, execution_plans: List) -> None:
         """
         Setup an execution.
         """
@@ -242,7 +243,7 @@ class APiHolon(APiCommunication):
             if channel["address"] == address:
                 return name
 
-    def start_basic_agent_thread(self, cmd: list) -> sp.Popen:
+    def start_basic_agent_thread(self, cmd: List) -> sp.Popen:
         """
         Start a basic agent thread.
         """
@@ -289,7 +290,7 @@ class APiHolon(APiCommunication):
         if succeeding_agent is not None:
             self.run_agent_thread(succeeding_agent, "dependant")
 
-    def start_dependant_agent_thread(self, a_id: str, plan_id: str, cmd: list) -> None:
+    def start_dependant_agent_thread(self, a_id: str, plan_id: str, cmd: List) -> None:
         """
         Start a dependant agent thread.
         """
@@ -307,14 +308,14 @@ class APiHolon(APiCommunication):
 
         if self.environment:
             cmd = shlex.split(self.environment["cmd"])
-            logger.debug("Running environment:", self.environment.get("name"))
+            logger.debug(f"Running environment: {self.environment.get('name')}")
             self.environment["instance"] = Thread(target=self.start_basic_agent_thread, args=(cmd,))
             self.environment["instance"].start()
             self.environment["status"] = "started"
 
         for c in self.channels.values():
             cmd = shlex.split(c["cmd"])
-            logger.debug("Running channel:", c.get("name"))
+            logger.debug(f"Running channel: {c.get('name')}")
             c["instance"] = Thread(target=self.start_basic_agent_thread, args=(cmd,))
             c["instance"].start()
             c["status"] = "started"
@@ -338,7 +339,7 @@ class APiHolon(APiCommunication):
             for a_type in self.agent_types.keys():
                 self.setup_agent(a_type)
 
-    def run_agent_thread(self, a: dict, start_type: str) -> None:
+    def run_agent_thread(self, a: Dict, start_type: str) -> None:
         """
         Run an agent thread.
         """
@@ -346,7 +347,7 @@ class APiHolon(APiCommunication):
         cmd = shlex.split(a["cmd"])
         a_id = a["id"]
         plan_id = a["plan_id"]
-        logger.debug("Running agent:", a.get("name"))
+        logger.debug(f"Running agent: {a.get('name')}")
         if start_type == "dependant":
             a["instance"] = Thread(
                 target=self.start_dependant_agent_thread, args=(a_id, plan_id, cmd)
@@ -442,9 +443,6 @@ class APiHolon(APiCommunication):
         )
         self.add_behaviour(bsa, bsa_template)
 
-        logger.debug(self.channels)
-        logger.debug(self.agents)
-
     class QueryName(CyclicBehaviour):
         """
         Query behaviour for the holon name.
@@ -468,12 +466,12 @@ class APiHolon(APiCommunication):
                         else:
                             address = self.agent.channels[channel]["address"]
 
-                        logger.debug("Found channel", channel, "address is", address)
+                        logger.debug(f"Found channel {channel} address is {address}")
 
                         metadata["success"] = "true"
                         metadata["address"] = address
                     except KeyError:
-                        logger.debug("Channel", channel, "not found")
+                        logger.debug(f"Channel {channel} not found")
                         metadata["success"] = "false"
                         metadata["address"] = "null"
                     await self.agent.schedule_message(str(msg.sender), metadata=metadata)
@@ -502,9 +500,7 @@ class APiHolon(APiCommunication):
                     logger.debug("(QueryNameGetReadyAgents) Message verified, processing ...")
                     agent = self.agent.agent_name_from_address(msg.sender.bare())
                     logger.debug(
-                        "(QueryNameGetReadyAgents) Setting agent",
-                        agent,
-                        "status to ready.",
+                        f"(QueryNameGetReadyAgents) Setting agent {agent} status to ready."
                     )
                     self.agent.agents[agent]["status"] = "ready"
                 else:
@@ -528,9 +524,7 @@ class APiHolon(APiCommunication):
                     if type == "channel":
                         channel = self.agent.channel_name_from_address(msg.sender.bare())
                         logger.debug(
-                            "(QueryNameGetReadyChannel) Setting channel",
-                            channel,
-                            "status to listening.",
+                            f"(QueryNameGetReadyChannel) Setting channel {channel} status to listening."
                         )
                         self.agent.channels[channel]["status"] = "listening"
 
@@ -544,9 +538,7 @@ class APiHolon(APiCommunication):
                     elif type == "agent":
                         agent = self.agent.agent_name_from_address(msg.sender.bare())
                         logger.debug(
-                            "(QueryNameGetReadyAgents) Setting agent",
-                            agent,
-                            "status to ready.",
+                            f"(QueryNameGetReadyAgents) Setting agent {agent} status to listening."
                         )
                         self.agent.agents[agent]["status"] = "listening"
 
@@ -661,13 +653,10 @@ class APiHolon(APiCommunication):
 
                     if msg.metadata["error-message"] != "null":
                         logger.debug(
-                            "Agent",
-                            agent,
-                            "finished with error",
-                            str(msg["error-message"]),
+                            f"Agent {agent} finished with error {str(msg['error-message'])}"
                         )
                     else:
-                        logger.debug("Agent", agent, "finished gracefully.")
+                        logger.debug(f"Agent {agent} finished gracefully.")
                     self.agent.agents[agent]["status"] = "stopped"
 
                     # sending message to ack that agent has stopped, so they can terminate
@@ -694,7 +683,7 @@ class APiHolon(APiCommunication):
         Status: finished
         """
 
-        def all_stopped(self, agents: list) -> bool:
+        def all_stopped(self, agents: List) -> bool:
             """
             Check if all agents are stopped.
             """
@@ -713,13 +702,10 @@ class APiHolon(APiCommunication):
 
                     if msg.metadata["error-message"] != "null":
                         logger.debug(
-                            "Agent",
-                            agent,
-                            "stopped with error",
-                            str(msg["error-message"]),
+                            f"Agent {agent} stopped with error {str(msg['error-message'])}"
                         )
                     else:
-                        logger.debug("Agent", agent, "stopped gracefully.")
+                        logger.debug(f"Agent {agent} stopped gracefully.")
                     self.agent.agents[agent]["status"] = "stopped"
 
                     all_stopped = self.all_stopped(

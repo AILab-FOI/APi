@@ -271,7 +271,7 @@ class APiEnvironment(APiBaseChannel):
                 for srv in self.attach_servers:
                     srv.sock.settimeout(0.1)
                     for client in iter_clients(srv):
-                        logger.debug("CLIENT", client, srv.addr)
+                        logger.debug(f"CLIENT {client} {srv.addr}")
                         # TODO should put in a method instead
                         if self.protocol == "udp":
                             result = None
@@ -282,11 +282,11 @@ class APiEnvironment(APiBaseChannel):
                                 pass
                         else:
                             result = client.recv_until(self.agent.delimiter, timeout=0.1)
-                        logger.debug("RESULT", result, srv.addr)
+                        logger.debug(f"RESULT {result} {srv.addr}")
                         if result:
-                            logger.debug("MAPPING RESULT", result.decode(), srv.addr)
+                            logger.debug(f"MAPPING RESULT {result.decode()} {srv.addr}")
                             msg = self.agent.map(result.decode())
-                            logger.debug("MSG", msg, srv.addr)
+                            logger.debug(f"MSG {msg} {srv.addr}")
 
                             self.agent.send_to_subscribed_agents(self.sub_type, msg.encode())
 

@@ -12,6 +12,7 @@ from src.grammar.listener import APi
 from src.models.namespace import APiNamespace
 from src.orchestration.registrar import APiRegistrationService
 from src.utils.logger import setup_logger
+from typing import Dict
 
 logger = setup_logger("main")
 
@@ -64,7 +65,7 @@ def read_specification_from_file(fl: str) -> APiNamespace:
     return process(lexer)
 
 
-def read_specification_files_recursively(fl: str, spec_by_holon: dict = {}) -> dict:
+def read_specification_files_recursively(fl: str, spec_by_holon: Dict = {}) -> Dict:
     """
     Read the specification files recursively.
     """
@@ -84,7 +85,7 @@ def read_specification_files_recursively(fl: str, spec_by_holon: dict = {}) -> d
     return spec_by_holon
 
 
-def generate_namespaces(configuration_name: str) -> dict:
+def generate_namespaces(configuration_name: str) -> Dict:
     """
     Generate namespaces from the configuration name.
     """

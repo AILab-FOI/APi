@@ -3,9 +3,6 @@ import socket
 import sys
 from time import sleep
 
-from src.utils.logger import setup_logger
-
-logger = setup_logger("APishc")
 
 BUFFER_SIZE = 4096
 
@@ -16,9 +13,9 @@ def write(data: str, stderr: bool = False) -> None:
     instead to sys.stdout.
     """
     if stderr:
-        logger.debug(data, file=sys.stderr, end="")
+        print(data, file=sys.stderr, end="")
     else:
-        logger.debug(data, end="")
+        print(data, end="")
 
 
 def stdin(host: str, port: int) -> None:
@@ -45,7 +42,7 @@ def stdin(host: str, port: int) -> None:
             s.send(inp.encode())
         except Exception as e:
             if e.errno == 107:  # Agent disconnected
-                logger.debug("Error, agent has disconnected!")
+                print("Error, agent has disconnected!")
                 break
 
 
@@ -70,9 +67,9 @@ def out(host: str, port: int, write_error: bool = False) -> None:
                 break
         except Exception as e:
             sleep(0.1)
-            logger.debug("Error in out", e)
+            print("Error in out", e)
             if e.errno == 107:  # Agent disconnected
-                logger.debug("Error, agent has disconnected!")
+                print("Error, agent has disconnected!")
                 break
 
 

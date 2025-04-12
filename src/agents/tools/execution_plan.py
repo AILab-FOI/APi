@@ -1,10 +1,11 @@
 from uuid import uuid4
 from src.utils.logger import setup_logger
+from typing import Tuple, Dict, List, Union
 
 logger = setup_logger("holon")
 
 
-def resolve_execution_plan(execution_plan: str) -> tuple[str, dict, list]:
+def resolve_execution_plan(execution_plan: str) -> Tuple[str, Dict, List]:
     """
     Converting execution plan
     """
@@ -34,7 +35,7 @@ def resolve_execution_plan(execution_plan: str) -> tuple[str, dict, list]:
     }
 
 
-def _get_agent_operator(remaining_sequence: list[str]) -> str | None:
+def _get_agent_operator(remaining_sequence: List[str]) -> Union[str, None]:
     """
     Gets operator of an agent (operator is non-alphabetic char that follows the agent specification)
     """
@@ -49,7 +50,7 @@ def _get_agent_operator(remaining_sequence: list[str]) -> str | None:
     return None
 
 
-def _get_next_agent(remaining_sequence: list[str]) -> str | None:
+def _get_next_agent(remaining_sequence: List[str]) -> Union[str, None]:
     """
     Getting the next agent from the current one (so that we know which are dependant ones)
     """
@@ -62,7 +63,7 @@ def _get_next_agent(remaining_sequence: list[str]) -> str | None:
     return None
 
 
-def _get_agents_and_operations(sequence_args: tuple[str, dict]) -> dict:
+def _get_agents_and_operations(sequence_args: Tuple[str, Dict]) -> Dict:
     """
     Resolving execution plan expression -> finding agents, their dependencies, and operators
     """
@@ -110,14 +111,14 @@ def _get_agents_and_operations(sequence_args: tuple[str, dict]) -> dict:
     return agents
 
 
-def _get_initial_agents_to_run(parallel_flows: list[dict]) -> list[str]:
+def _get_initial_agents_to_run(parallel_flows: List[Dict]) -> List[str]:
     """
     Finding out what are the initial agents that need to be run
     """
     return [list(flow.keys())[0] for flow in parallel_flows]
 
 
-def _extract_brackets(flow: str) -> list[tuple[int, int]]:
+def _extract_brackets(flow: str) -> List[Tuple[int, int]]:
     """
     Extracts the brackets from the flow
     """
@@ -144,7 +145,7 @@ def _extract_brackets(flow: str) -> list[tuple[int, int]]:
     return brackets
 
 
-def _extract_args(flow: str, brackets: list[tuple[int, int]]) -> dict:
+def _extract_args(flow: str, brackets: List[Tuple[int, int]]) -> Dict:
     """
     Extracts the arguments from the flow
     """
@@ -179,7 +180,7 @@ def _extract_args(flow: str, brackets: list[tuple[int, int]]) -> dict:
     return args_by_agent
 
 
-def _clean_up_flow(flow: str, brackets: list[tuple[int, int]]) -> str:
+def _clean_up_flow(flow: str, brackets: List[Tuple[int, int]]) -> str:
     """
     Cleans up the flow
     """
@@ -199,7 +200,7 @@ def _clean_up_flow(flow: str, brackets: list[tuple[int, int]]) -> str:
     return new_flow
 
 
-def _extract_args_and_clean_up(flow: str) -> tuple[str, dict]:
+def _extract_args_and_clean_up(flow: str) -> Tuple[str, Dict]:
     """
     Extracts the arguments and cleans up the flow
     """
@@ -211,7 +212,7 @@ def _extract_args_and_clean_up(flow: str) -> tuple[str, dict]:
     return new_flow, args_by_agent
 
 
-def _get_execution_plan_by_id(plan_id: str):
+def _get_execution_plan_by_id(plan_id: str) -> Union[Tuple[str, Dict, List], None]:
     """
     Getting execution plan by id
     """
@@ -239,7 +240,7 @@ def _start_agent(plan_id: str, agent_id: str) -> None:
     _set_agent_status(plan_id, agent_id, "started")
 
 
-def _start_execution_plans(execution_plans: list[tuple[str, dict, list]]) -> None:
+def _start_execution_plans(execution_plans: List[Tuple[str, Dict, List]]) -> None:
     """
     Start execution plans
     """

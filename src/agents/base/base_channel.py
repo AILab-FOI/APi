@@ -9,6 +9,8 @@ from spade.behaviour import OneShotBehaviour
 
 from src.agents.base.base_communication import APiCommunication
 from src.utils.logger import setup_logger
+from typing import Tuple, Dict, List, Union
+import json
 
 logger = setup_logger("base_channel")
 
@@ -41,7 +43,7 @@ class APiBaseChannel(APiCommunication):
         self.kb = swipl()
         self.var_re = re.compile(r"[\?][a-zA-Z][a-zA-Z0-9-_]*")
 
-        self.min_port, self.max_port = portrange
+        self.min_port, self.max_port = json.loads(portrange)
 
         self.input = channel_input
         self.output = channel_output
@@ -58,7 +60,7 @@ class APiBaseChannel(APiCommunication):
         #
         # * -> Done!
 
-        if self.input is None or self.output is None:
+        if not self.input or not self.output:
             self.map = lambda x: x
         else:
             if self.input.startswith("regex("):
@@ -104,7 +106,7 @@ class APiBaseChannel(APiCommunication):
         """
         Map the data to the input
         """
-        pass
+        return data
 
     def map_re(self, data: str) -> str:
         """
@@ -125,7 +127,7 @@ class APiBaseChannel(APiCommunication):
 
         return self.format_output(res)
 
-    def format_output(self, res: list[dict]) -> str:
+    def format_output(self, res: List[Dict]) -> str:
         """
         Format the output
         """
@@ -178,7 +180,7 @@ class APiBaseChannel(APiCommunication):
             return ""
 
     def get_server_clients(
-        self, server: nclib.UDPServer | nclib.TCPServer, ref_var_name: str, protocol: str
+        self, server: Union[nclib.UDPServer, nclib.TCPServer], ref_var_name: str, protocol: str
     ) -> None:
         """
         Get the server clients
@@ -225,7 +227,7 @@ class APiBaseChannel(APiCommunication):
             s.close()
         return IP
 
-    def create_server(self, port: int, protocol: str) -> nclib.UDPServer | nclib.TCPServer:
+    def create_server(self, port: int, protocol: str) -> Union[nclib.UDPServer, nclib.TCPServer]:
         """
         Create a server
         """
@@ -236,14 +238,14 @@ class APiBaseChannel(APiCommunication):
 
         return nclib.TCPServer(("0.0.0.0", port))
 
-    def get_server(self, protocol: str) -> tuple[nclib.UDPServer | nclib.TCPServer, str, str, str]:
+    def get_server(
+        self, protocol: str
+    ) -> Tuple[Union[nclib.UDPServer, nclib.TCPServer], str, str, str]:
         """
         Get a NetCat server for sending or receiving
         """
         port = self.get_free_port(protocol)
         host = self.get_ip()
-
-        logger.debug(host, port)
 
         srv_created = False
         while not srv_created:

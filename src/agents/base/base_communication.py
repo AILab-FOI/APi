@@ -85,7 +85,7 @@ class APiCommunication(Agent):
         """
         # TODO: See if this can be done in a more elegant way ...
         msg = Message(to=to, body=body, metadata=deepcopy(metadata))
-        logger.debug("Sending message:", msg.metadata, msg.to)
+        logger.debug(f"Sending message: {msg.metadata} {msg.to}")
         await self.behaviour_output.send(deepcopy(msg))
         try:
             self.input_ack.add(msg.metadata["reply-with"])
