@@ -9,8 +9,9 @@ from spade.behaviour import OneShotBehaviour
 
 from src.agents.base.base_communication import APiCommunication
 from src.utils.logger import setup_logger
-from typing import Tuple, Dict, List, Union
+from typing import Tuple, Dict, List, Union, Optional
 import json
+
 
 logger = setup_logger("base_channel")
 
@@ -24,14 +25,14 @@ class APiBaseChannel(APiCommunication):
 
     def __init__(
         self,
-        channelname,
-        name,
-        password,
-        holon,
-        token,
-        portrange,
-        channel_input=None,
-        channel_output=None,
+        channelname: str,
+        name: str,
+        password: str,
+        holon: str,
+        token: Optional[str] = None,
+        portrange: Optional[Tuple[int, int]] = None,
+        channel_input: Optional[str] = None,
+        channel_output: Optional[str] = None,
     ):
         global logger
         logger = setup_logger("channel " + channelname)
@@ -259,9 +260,12 @@ class APiBaseChannel(APiCommunication):
 
         return srv, host, str(port), protocol
 
-    class StatusListening(OneShotBehaviour):
+    class Ready(OneShotBehaviour):
         """
-        Status listening
+        Ready behaviour.
+
+        Once the channel is created, this one shot behaviour is used to inform the holon of
+        the channel's status.
         """
 
         async def run(self):

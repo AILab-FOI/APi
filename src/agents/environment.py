@@ -11,6 +11,7 @@ from spade.template import Template
 
 from src.agents.base.base_channel import APiBaseChannel
 from src.utils.logger import setup_logger
+from typing import Tuple, Optional
 
 logger = setup_logger("environment")
 
@@ -22,23 +23,23 @@ class APiEnvironment(APiBaseChannel):
 
     def __init__(
         self,
-        channelname,
-        name,
-        password,
-        holon,
-        holon_name,
-        token,
-        portrange,
-        input_protocol,
-        output_protocol,
-        input=None,
-        output=None,
+        channelname: str,
+        name: str,
+        password: str,
+        holon: str,
+        holon_name: str,
+        token: Optional[str] = None,
+        portrange: Optional[Tuple[int, int]] = None,
+        input_protocol: Optional[str] = None,
+        output_protocol: Optional[str] = None,
+        input: Optional[str] = None,
+        output: Optional[str] = None,
     ):
         # revert and pass proper input & output
         super().__init__(channelname, name, password, holon, token, portrange, input, output)
         # used for external agents that will communicate with holon / environment
-        self.input_attach_servers = []
-        self.output_attach_servers = []
+        self.input_write_servers = []
+        self.output_write_servers = []
 
         self.agree_message_template = {}
         self.agree_message_template["performative"] = "agree"
@@ -101,22 +102,22 @@ class APiEnvironment(APiBaseChannel):
         )
         self.output_subscribe_cli_socket.start()
 
-    def send_to_subscribed_agents(self, sub_type: str, msg: bytes) -> None:
+    def send_to_subscribed_read_agents_and_holons(self, env_type: str, msg: bytes) -> None:
         """
         Send message to subscribed agents.
         """
 
         socket_clients = (
             self.socket_clients["input_subscribe_socket_clients"]
-            if sub_type == "input"
+            if env_type == "input"
             else self.socket_clients["output_subscribe_socket_clients"]
         )
         s_server = (
             self.input_subscribe_socket_server
-            if sub_type == "input"
+            if env_type == "input"
             else self.output_subscribe_socket_server
         )
-        protocol = self.input_protocol if sub_type == "input" else self.output_protocol
+        protocol = self.input_protocol if env_type == "input" else self.output_protocol
 
         if protocol == "udp":
             for client in socket_clients:
@@ -134,14 +135,14 @@ class APiEnvironment(APiBaseChannel):
             # for idx in closed_clients:
             # del self.socket_clients[idx]
 
-    def get_subscribe_server(self, sub_type: str, protocol: str) -> tuple[str, str, int, str]:
+    def get_read_server(self, env_type: str, protocol: str) -> tuple[str, str, int, str]:
         """
-        Get subscribe server.
+        Get read server.
         """
 
         instance = (
             self.input_subscribe_socket_server
-            if sub_type == "input"
+            if env_type == "input"
             else self.output_subscribe_socket_server
         )
 
@@ -152,23 +153,26 @@ class APiEnvironment(APiBaseChannel):
 
         return srv, ip, port, protocol
 
-    def get_attach_server(self, att_type: str, protocol: str) -> tuple[str, str, int, str]:
+    def get_write_server(self, env_type: str, protocol: str) -> tuple[str, str, int, str]:
         """
-        Get attach server.
+        Get write server.
         """
 
         srv, host, port, protocol = self.get_server(protocol)
 
-        if att_type == "input":
-            self.input_attach_servers.append(srv)
+        if env_type == "input":
+            self.input_write_servers.append(srv)
         else:
-            self.output_attach_servers.append(srv)
+            self.output_write_servers.append(srv)
 
         return srv, host, port, protocol
 
     class Subscribe(CyclicBehaviour):
         """
-        Agent wants to listen or write to channel
+        Subscribe behaviour.
+
+        This behaviour is runs cyclically and is used for agent to subscribe to the environment.
+        Agent can either listen (read) to the messages from the environment or send messages (write) to the environment.
         """
 
         async def run(self):
@@ -182,7 +186,7 @@ class APiEnvironment(APiBaseChannel):
                     if msg.metadata["performative"] == "subscribe_to_input":
                         metadata["agent"] = "ENV_INPUT"
                         metadata["type"] = "input"
-                        _, ip, port, protocol = self.agent.get_subscribe_server(
+                        _, ip, port, protocol = self.agent.get_read_server(
                             "input", self.agent.input_protocol
                         )
                         logger.info("ADDED input subscribe server", ip, port)
@@ -190,7 +194,7 @@ class APiEnvironment(APiBaseChannel):
                     elif msg.metadata["performative"] == "subscribe_to_output":
                         metadata["agent"] = "ENV_OUTPUT"
                         metadata["type"] = "input"
-                        _, ip, port, protocol = self.agent.get_subscribe_server(
+                        _, ip, port, protocol = self.agent.get_read_server(
                             "output", self.agent.output_protocol
                         )
                         logger.info("ADDED output subscribe server", ip, port)
@@ -198,14 +202,14 @@ class APiEnvironment(APiBaseChannel):
                     elif msg.metadata["performative"] == "request_to_input":
                         metadata["agent"] = "ENV_INPUT"
                         metadata["type"] = "output"
-                        _, ip, port, protocol = self.agent.get_attach_server(
+                        _, ip, port, protocol = self.agent.get_write_server(
                             "input", self.agent.input_protocol
                         )
                         logger.info("ADDED input attach server", ip, port)
                     elif msg.metadata["performative"] == "request_to_output":
                         metadata["agent"] = "ENV_OUTPUT"
                         metadata["type"] = "output"
-                        _, ip, port, protocol = self.agent.get_attach_server(
+                        _, ip, port, protocol = self.agent.get_write_server(
                             "output", self.agent.output_protocol
                         )
                         logger.info("ADDED output attach server", ip, port)
@@ -225,21 +229,24 @@ class APiEnvironment(APiBaseChannel):
                     await self.agent.schedule_message(str(msg.sender), metadata=metadata)
                     await asyncio.sleep(0.1)
                 else:
-                    logger.debug("Message could not be verified. IMPOSTER!!!!!!")
+                    logger.debug("Message could not be verified.")
                     metadata = self.agent.refuse_message_template
                     metadata["in-reply-to"] = msg.metadata["reply-with"]
                     metadata["reason"] = "security-policy"
                     await self.agent.schedule_message(str(msg.sender), metadata=metadata)
 
-    class Forward(CyclicBehaviour):
+    class Listening(CyclicBehaviour):
         """
-        Forward behaviour.
+        Listening behaviour.
+
+        This is behaviour runs cyclically which adheres to how sockets work (in loop).
+        It listens for incoming connections and messages from agents and other holons that are subscribed to the environment.
         """
 
-        def __init__(self, sub_type: str, attach_servers: list) -> None:
+        def __init__(self, sub_type: str, write_servers: list) -> None:
             super().__init__()
             self.sub_type = sub_type
-            self.attach_servers = attach_servers
+            self.write_servers = write_servers
             self.protocol = (
                 self.agent.input_protocol if sub_type == "input" else self.agent.output_protocol
             )
@@ -264,11 +271,8 @@ class APiEnvironment(APiBaseChannel):
                         logger.info("Error accepting client", e)
                         return
 
-            # Slusaju se poruke od svih agenata koji su attached, te je ovo cyclic behv jer
-            # rec_until nije awaitan, nego mora biti u loopu. nakon sto se dohvati poruka, onda
-            # se iterira kroz subscribed agente, te se njima salje result
-            if self.attach_servers:
-                for srv in self.attach_servers:
+            if self.write_servers:
+                for srv in self.write_servers:
                     srv.sock.settimeout(0.1)
                     for client in iter_clients(srv):
                         logger.debug(f"CLIENT {client} {srv.addr}")
@@ -288,7 +292,9 @@ class APiEnvironment(APiBaseChannel):
                             msg = self.agent.map(result.decode())
                             logger.debug(f"MSG {msg} {srv.addr}")
 
-                            self.agent.send_to_subscribed_agents(self.sub_type, msg.encode())
+                            self.agent.send_to_subscribed_read_agents_and_holons(
+                                self.sub_type, msg.encode()
+                            )
 
     async def setup(self) -> None:
         """
@@ -297,17 +303,17 @@ class APiEnvironment(APiBaseChannel):
 
         super().setup()
 
-        bsl = self.StatusListening()
+        bsl = self.Ready()
         self.add_behaviour(bsl)
 
         bsubs = self.Subscribe()
         bsubs_template = Template(metadata={"ontology": "APiDataTransfer"})
         self.add_behaviour(bsubs, bsubs_template)
 
-        bifwd = self.Forward("input", self.input_attach_servers)
+        bifwd = self.Listening("input", self.input_write_servers)
         self.add_behaviour(bifwd)
 
-        bofwd = self.Forward("output", self.output_attach_servers)
+        bofwd = self.Listening("output", self.output_write_servers)
         self.add_behaviour(bofwd)
 
 

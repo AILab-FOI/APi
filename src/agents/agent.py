@@ -553,52 +553,55 @@ class APiAgent(APiBaseWrapperAgent):
 
         super().setup()
 
-        self.behaviour_sl = self.StatusListening()
+        self.behaviour_sl = self.Ready()
         self.add_behaviour(self.behaviour_sl)
 
-        self.behaviour_gca = self.GetChannelAdresses()
+        self.behaviour_gca = self.RequestAdresses()
         self.add_behaviour(self.behaviour_gca)
 
-        self.behaviour_stic = self.SubscribeToInputChannels()
-        self.add_behaviour(self.behaviour_stic)
-
-        self.behaviour_atoc = self.AttachToOutputChannels()
-        self.add_behaviour(self.behaviour_atoc)
-
-        self.behaviour_ste = self.SubscribeToEnvironment()
-        self.add_behaviour(self.behaviour_ste)
-
-        self.behaviour_ate = self.AttachToEnvironment()
-        self.add_behaviour(self.behaviour_ate)
-
-        self.behaviour_sth = self.SubscribeToHolon()
-        self.add_behaviour(self.behaviour_sth)
-
-        self.behaviour_ath = self.AttachToHolon()
-        self.add_behaviour(self.behaviour_ath)
-
-        self.behaviour_qc = self.QueryChannels()
+        self.behaviour_qc = self.ReceiveAdresses()
         bqc_template = Template(metadata={"ontology": "APiQuery"})
         self.add_behaviour(self.behaviour_qc, bqc_template)
 
-        self.behaviour_sic = self.SetupInputChannels()
+        self.behaviour_stic = self.SubscribeToReadFromChannels()
+        self.add_behaviour(self.behaviour_stic)
+
+        self.behaviour_atoc = self.SubscribeToWriteToChannels()
+        self.add_behaviour(self.behaviour_atoc)
+
+        self.behaviour_ste = self.SubscribeToReadFromInputEnvironment()
+        self.add_behaviour(self.behaviour_ste)
+
+        self.behaviour_ate = self.SubscribeToWriteToOutputEnvironment()
+        self.add_behaviour(self.behaviour_ate)
+
+        # self.behaviour_sth = self.SubscribeToHolon()
+        # self.add_behaviour(self.behaviour_sth)
+
+        # self.behaviour_ath = self.AttachToHolon()
+        # self.add_behaviour(self.behaviour_ath)
+
+        self.behaviour_sic = self.SetupReadChannelSockets()
         bsic_template = Template(metadata={"ontology": "APiDataTransfer", "type": "input"})
         self.add_behaviour(self.behaviour_sic, bsic_template)
 
-        self.behaviour_soc = self.SetupOutputChannels()
+        self.behaviour_soc = self.SetupWriteChannelSockets()
         bsoc_template = Template(metadata={"ontology": "APiDataTransfer", "type": "output"})
         self.add_behaviour(self.behaviour_soc, bsoc_template)
 
-        self.behaviour_l = self.Listen()
-        # self.add_behaviour( self.behaviour_l )
+        # Note: this behaviour is attached inside Start behaviour
+        self.behaviour_l = self.Listening()
 
-        self.behaviour_ss = self.StartService()
+        self.behaviour_ss = self.Start()
         bss_template = Template(metadata={"ontology": "APiScheduling", "action": "start"})
         self.add_behaviour(self.behaviour_ss, bss_template)
 
-    class StatusListening(OneShotBehaviour):
+    class Ready(OneShotBehaviour):
         """
-        Status listening behaviour.
+        Ready behaviour.
+
+        Once the agent is created, this one shot behaviour is used to inform the holon of
+        the agent's status.
         """
 
         async def run(self) -> None:
@@ -606,12 +609,12 @@ class APiAgent(APiBaseWrapperAgent):
             metadata["status"] = "listening"
             await self.agent.schedule_message(self.agent.holon, metadata=metadata)
 
-    class GetChannelAdresses(OneShotBehaviour):
+    class RequestAdresses(OneShotBehaviour):
         """
-        Get channel addresses.
+        Request addresses.
 
         Sending msg to holon once flows of this agent are identified, so that holon
-        can pass down XMPP details for this agent to communicate with other agents
+        can pass down XMPP details for this agent to communicate with other agents via channels.
 
         Ontology: APiQuery
         """
@@ -673,11 +676,11 @@ class APiAgent(APiBaseWrapperAgent):
                     address = self.agent.holons_address_book[out]
                     await self.agent.schedule_message(address, metadata=metadata)
 
-    class SubscribeToInputChannels(OneShotBehaviour):
+    class SubscribeToReadFromChannels(OneShotBehaviour):
         """
-        Subscribe to input channels behaviour.
+        Subscribe to read from channels behaviour.
 
-        Once address book is available, subscribe to
+        Sending requests to channels to subscribe them for reading its messages.
         """
 
         async def run(self) -> None:
@@ -692,11 +695,11 @@ class APiAgent(APiBaseWrapperAgent):
                 metadata["reply-with"] = str(uuid4().hex)
                 await self.agent.schedule_message(channel, metadata=metadata)
 
-    class AttachToOutputChannels(OneShotBehaviour):
+    class SubscribeToWriteToChannels(OneShotBehaviour):
         """
-        Attach to output channels behaviour.
+        Subscribe to write to channels behaviour.
 
-        Letting channels know that this agent wants to write to them.
+        Sending requests to channels to subscribe them for writing to them.
         """
 
         async def run(self) -> None:
@@ -711,11 +714,11 @@ class APiAgent(APiBaseWrapperAgent):
                 metadata["reply-with"] = str(uuid4().hex)
                 await self.agent.schedule_message(channel, metadata=metadata)
 
-    class SubscribeToEnvironment(OneShotBehaviour):
+    class SubscribeToReadFromInputEnvironment(OneShotBehaviour):
         """
-        Subscribe to environment inputs behaviour.
+        Subscribe to read from input environment behaviour.
 
-        Letting environment know that this agent wants to read from it.
+        Sending requests to input environment to subscribe it for reading its messages.
         """
 
         async def run(self) -> None:
@@ -733,11 +736,11 @@ class APiAgent(APiBaseWrapperAgent):
                 metadata["reply-with"] = str(uuid4().hex)
                 await self.agent.schedule_message(channel, metadata=metadata)
 
-    class AttachToEnvironment(OneShotBehaviour):
+    class SubscribeToWriteToOutputEnvironment(OneShotBehaviour):
         """
-        Attach to environment outputs behaviour.
+        Subscribe to read from input environment behaviour.
 
-        Letting environment know that this agent wants to write to it.
+        Sending requests to output environment to subscribe it for writing to it.
         """
 
         async def run(self) -> None:
@@ -757,63 +760,65 @@ class APiAgent(APiBaseWrapperAgent):
                 metadata["reply-with"] = str(uuid4().hex)
                 await self.agent.schedule_message(env, metadata=metadata)
 
-    class SubscribeToHolon(OneShotBehaviour):
+    # deprecate
+    # class SubscribeToHolon(OneShotBehaviour):
+    #     """
+    #     Subscribe to holon inputs behaviour.
+
+    #     Letting holon know that this agent wants to read from it.
+    #     """
+
+    #     async def run(self) -> None:
+    #         await self.agent.behaviour_gca.join()
+    #         logger.debug(f"Subscribing to holon inputs: {self.agent.input_holon_query_buffer}")
+    #         for inp in self.agent.input_holon_query_buffer:
+    #             # waiting until holon sends the address book
+    #             while inp not in self.agent.address_book:
+    #                 await asyncio.sleep(0.1)
+    #             channel = self.agent.address_book[inp]
+    #             metadata = self.agent.environment_msg_template
+    #             metadata["performative"] = "subscribe_to_output"
+    #             metadata["reply-with"] = str(uuid4().hex)
+    #             metadata["external"] = "True"
+    #             await self.agent.schedule_message(channel, metadata=metadata)
+
+    # # deprecate
+    # class AttachToHolon(OneShotBehaviour):
+    #     """
+    #     Attach to holon outputs behaviour.
+
+    #     Letting holon know that this agent wants to write to it.
+    #     """
+
+    #     async def run(self) -> None:
+    #         await self.agent.behaviour_gca.join()
+    #         logger.debug(f"Subscribing to holon outputs: {self.agent.output_holon_query_buffer}")
+    #         for out in self.agent.output_holon_query_buffer:
+    #             # waiting until holon sends the address book
+    #             while out not in self.agent.address_book:
+    #                 await asyncio.sleep(0.1)
+    #             channel = self.agent.address_book[out]
+    #             metadata = self.agent.environment_msg_template
+    #             metadata["performative"] = "request_to_input"
+    #             metadata["reply-with"] = str(uuid4().hex)
+    #             metadata["external"] = "True"
+    #             await asyncio.sleep(
+    #                 15
+    #             )  # makes sure that we do not start writing to holon before it is started up
+    #             await self.agent.schedule_message(channel, metadata=metadata)
+
+    class ReceiveAdresses(CyclicBehaviour):
         """
-        Subscribe to holon inputs behaviour.
+        Receive addresses behaviour.
 
-        Letting holon know that this agent wants to read from it.
-        """
-
-        async def run(self) -> None:
-            await self.agent.behaviour_gca.join()
-            logger.debug(f"Subscribing to holon inputs: {self.agent.input_holon_query_buffer}")
-            for inp in self.agent.input_holon_query_buffer:
-                # waiting until holon sends the address book
-                while inp not in self.agent.address_book:
-                    await asyncio.sleep(0.1)
-                channel = self.agent.address_book[inp]
-                metadata = self.agent.environment_msg_template
-                metadata["performative"] = "subscribe_to_output"
-                metadata["reply-with"] = str(uuid4().hex)
-                metadata["external"] = "True"
-                await self.agent.schedule_message(channel, metadata=metadata)
-
-    class AttachToHolon(OneShotBehaviour):
-        """
-        Attach to holon outputs behaviour.
-
-        Letting holon know that this agent wants to write to it.
-        """
-
-        async def run(self) -> None:
-            await self.agent.behaviour_gca.join()
-            logger.debug(f"Subscribing to holon outputs: {self.agent.output_holon_query_buffer}")
-            for out in self.agent.output_holon_query_buffer:
-                # waiting until holon sends the address book
-                while out not in self.agent.address_book:
-                    await asyncio.sleep(0.1)
-                channel = self.agent.address_book[out]
-                metadata = self.agent.environment_msg_template
-                metadata["performative"] = "request_to_input"
-                metadata["reply-with"] = str(uuid4().hex)
-                metadata["external"] = "True"
-                await asyncio.sleep(
-                    15
-                )  # makes sure that we do not start writing to holon before it is started up
-                await self.agent.schedule_message(channel, metadata=metadata)
-
-    class QueryChannels(CyclicBehaviour):
-        """
-        Query channels behaviour.
-
-        Once holon passes the address book, we make sure to store it for this agent
+        Holon will pass down the address book to the agent for the requested channels.
         """
 
         async def run(self) -> None:
             msg = await self.receive(timeout=0.1)
             if msg:
                 if self.agent.verify(msg):
-                    logger.debug("(QueryChannels) Message verified, processing ...")
+                    logger.debug("(ReceiveAdresses) Message verified, processing ...")
                     channel = msg.metadata["address"]
                     try:
                         self.agent.input_ack.remove(msg.metadata["in-reply-to"])
@@ -834,13 +839,13 @@ class APiAgent(APiBaseWrapperAgent):
                             f"I have no memory of this message ({msg.metadata['in-reply-to']}). (awkward Gandalf look)"
                         )
                 else:
-                    logger.debug("Message could not be verified. IMPOSTER!!!!!!")
+                    logger.debug("Message could not be verified.")
 
-    class SetupInputChannels(CyclicBehaviour):
+    class SetupReadChannelSockets(CyclicBehaviour):
         """
-        Setup input channels behaviour.
+        Setup read channel sockets behaviour.
 
-        Once address book is available, we create netcat connection for agents to communicate
+        Once agent has requested to subscribe to channel, channel will query back with open socket details.
         """
 
         async def run(self):
@@ -848,7 +853,7 @@ class APiAgent(APiBaseWrapperAgent):
             msg = await self.receive(timeout=1)
             if msg:
                 if self.agent.verify(msg):
-                    logger.debug("(SetupInputChannels) Message verified, processing ...")
+                    logger.debug("(SetupReadChannelSockets) Message verified, processing ...")
                     try:
                         self.agent.input_ack.remove(msg.metadata["in-reply-to"])
                         if msg.metadata["performative"] == "refuse":
@@ -861,7 +866,7 @@ class APiAgent(APiBaseWrapperAgent):
                             is_udp = msg.metadata["protocol"] == "udp"
                             servers = self.agent.input_channel_servers
                             logger.debug(
-                                f"(SetupInputChannels) Setting up {msg.metadata['type']} channel {channel}"
+                                f"(SetupReadChannelSockets) Setting up {msg.metadata['type']} channel {channel}"
                             )
                             servers[channel] = {}
                             servers[channel]["server"] = msg.metadata["server"]
@@ -895,17 +900,13 @@ class APiAgent(APiBaseWrapperAgent):
                             f"I have no memory of this message ({msg.metadata['in-reply-to']}). (awkward Gandalf look)"
                         )
                 else:
-                    logger.debug("Message could not be verified. IMPOSTER!!!!!!")
+                    logger.debug("Message could not be verified.")
 
-    """
-    Once address book is available, we create netcat connection for agents to communicate
-    """
-
-    class SetupOutputChannels(CyclicBehaviour):
+    class SetupWriteChannelSockets(CyclicBehaviour):
         """
-        Setup output channels behaviour.
+        Setup write channel sockets behaviour.
 
-        Once address book is available, we create netcat connection for agents to communicate
+        Once agent has requested to subscribe to channel, channel will query back with open socket details.
         """
 
         async def run(self) -> None:
@@ -913,7 +914,7 @@ class APiAgent(APiBaseWrapperAgent):
             msg = await self.receive(timeout=1)
             if msg:
                 if self.agent.verify(msg):
-                    logger.debug("(SetupOutputChannels) Message verified, processing ...")
+                    logger.debug("(SetupWriteChannelSockets) Message verified, processing ...")
                     try:
                         self.agent.input_ack.remove(msg.metadata["in-reply-to"])
                         if msg.metadata["performative"] == "refuse":
@@ -926,7 +927,7 @@ class APiAgent(APiBaseWrapperAgent):
                             is_udp = msg.metadata["protocol"] == "udp"
                             servers = self.agent.output_channel_servers
                             logger.debug(
-                                f"(SetupOutputChannels) Setting up {msg.metadata['type']} channel {channel}"
+                                f"(SetupWriteChannelSockets) Setting up {msg.metadata['type']} channel {channel}"
                             )
                             servers[channel] = {}
                             servers[channel]["server"] = msg.metadata["server"]
@@ -957,14 +958,14 @@ class APiAgent(APiBaseWrapperAgent):
                             f"I have no memory of this message ({msg.metadata['in-reply-to']}). (awkward Gandalf look)"
                         )
                 else:
-                    logger.debug("Message could not be verified. IMPOSTER!!!!!!")
+                    logger.debug("Message could not be verified.")
 
-    class Listen(CyclicBehaviour):
+    class Listening(CyclicBehaviour):
         """
-        Listen for input behaviour.
+        Listening behaviour.
 
-        Once netcat socket is created, this is used to start listening for input, once
-        holon gives a green light, which is executed from StartService
+        This is behaviour runs cyclically which adheres to how sockets work (in loop).
+        It listens for incoming connections and messages from channels / environment that this agent is subscribed to.
         """
 
         async def run(self) -> None:
@@ -982,11 +983,11 @@ class APiAgent(APiBaseWrapperAgent):
                         logger.info(f"Received message from channel {channel}: {result}")
                         self.agent.input(result.decode())
 
-    class StartService(CyclicBehaviour):
+    class Start(CyclicBehaviour):
         """
-        Start service behaviour.
+        Start behaviour.
 
-        Waiting for holon to allow us to start.
+        Agent informs holon that it is ready to start. Holon will let agent know when it is time to start.
 
         Ontology: APiScheduling
         Status: Start
@@ -996,15 +997,13 @@ class APiAgent(APiBaseWrapperAgent):
             msg = await self.receive(timeout=1)
             if msg:
                 if self.agent.verify(msg):
-                    logger.debug("(StartService) Message verified, processing ...")
-                    logger.debug(
-                        "(StartService) Holon has scheduled us to start. Starting service!"
-                    )
+                    logger.debug("(Start) Message verified, processing ...")
+                    logger.debug("(Start) Holon has scheduled us to start. Starting service!")
                     # based on agent description (ws, http, etc.), this will setup the agent to be able to communicate
                     self.agent.service_start()
                     self.agent.add_behaviour(self.agent.behaviour_l)  # Start listening for input
                 else:
-                    logger.debug("Message could not be verified. IMPOSTER!!!!!!")
+                    logger.debug("Message could not be verified.")
 
 
 def main(

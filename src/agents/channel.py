@@ -47,8 +47,8 @@ class APiChannel(APiBaseChannel):
             channel_output,
         )
 
-        # TODO we can use a single server for attach instead of multiple
-        self.attach_servers = []
+        # TODO we can use a single server for write instead of multiple
+        self.write_servers = []
 
         self.agree_message_template = {}
         self.agree_message_template["performative"] = "agree"
@@ -70,7 +70,7 @@ class APiChannel(APiBaseChannel):
         # one protocol or another
         self.protocol = protocol
         srv, ip, port, protocol = self.get_server(protocol)
-        self.socket_server = {
+        self.read_socket_server = {
             "server": srv,
             "ip": ip,
             "port": port,
@@ -86,14 +86,14 @@ class APiChannel(APiBaseChannel):
         )
         self.cli_socket.start()
 
-    def send_to_subscribed_agents(self, msg: bytes) -> None:
+    def send_to_subscribed_read_agents(self, msg: bytes) -> None:
         """
-        Send message to subscribed agents.
+        Send message to subscribed read agents.
         """
 
         if self.protocol == "udp":
             for client in self.socket_clients["subscribe"]:
-                self.socket_server["server"].respond(msg, client)
+                self.read_socket_server["server"].respond(msg, client)
         else:
             closed_clients = []
             for idx, client in enumerate(self.socket_clients["subscribe"]):
@@ -107,12 +107,12 @@ class APiChannel(APiBaseChannel):
             # for idx in closed_clients:
             # del self.socket_clients['subscribe][idx]
 
-    def get_subscribe_server(self, protocol: str) -> Tuple[str, str, int, str]:
+    def get_read_server(self, protocol: str) -> Tuple[str, str, int, str]:
         """
-        Get subscribe server.
+        Get read server.
         """
 
-        instance = self.socket_server
+        instance = self.read_socket_server
 
         srv = instance["server"]
         ip = instance["ip"]
@@ -121,20 +121,23 @@ class APiChannel(APiBaseChannel):
 
         return srv, ip, port, protocol
 
-    def get_attach_server(self, protocol: str) -> Tuple[str, str, int, str]:
+    def get_write_server(self, protocol: str) -> Tuple[str, str, int, str]:
         """
-        Get attach server.
+        Get write server.
         """
 
         srv, host, port, protocol = self.get_server(protocol)
 
-        self.attach_servers.append(srv)
+        self.write_servers.append(srv)
 
         return srv, host, port, protocol
 
     class Subscribe(CyclicBehaviour):
         """
-        Agent wants to listen or write to channel.
+        Subscribe behaviour.
+
+        This behaviour is runs cyclically and is used for agent to subscribe to the channel.
+        Agent can either listen (read) to the messages from the channel or send messages (write) to the channel.
         """
 
         async def run(self) -> None:
@@ -147,12 +150,12 @@ class APiChannel(APiBaseChannel):
                     metadata["agent"] = self.agent.channelname
                     if msg.metadata["performative"] == "subscribe":
                         metadata["type"] = "input"
-                        _, ip, port, protocol = self.agent.get_subscribe_server(self.agent.protocol)
+                        _, ip, port, protocol = self.agent.get_read_server(self.agent.protocol)
                         logger.info(f"Added subscribe server: {ip} for port {port}")
                     elif msg.metadata["performative"] == "request":
                         metadata["type"] = "output"
-                        _, ip, port, protocol = self.agent.get_attach_server(self.agent.protocol)
-                        logger.info(f"Added attach server: {ip} for port {port}")
+                        _, ip, port, protocol = self.agent.get_write_server(self.agent.protocol)
+                        logger.info(f"Added write server: {ip} for port {port}")
                     else:
                         logger.debug("Unknown message")
                         metadata = self.agent.refuse_message_template
@@ -166,15 +169,18 @@ class APiChannel(APiBaseChannel):
                     await self.agent.schedule_message(str(msg.sender), metadata=metadata)
                     await asyncio.sleep(0.1)
                 else:
-                    logger.debug("Message could not be verified. IMPOSTER!!!!!!")
+                    logger.debug("Message could not be verified.")
                     metadata = self.agent.refuse_message_template
                     metadata["in-reply-to"] = msg.metadata["reply-with"]
                     metadata["reason"] = "security-policy"
                     await self.agent.schedule_message(str(msg.sender), metadata=metadata)
 
-    class Forward(CyclicBehaviour):
+    class Listening(CyclicBehaviour):
         """
-        Forward behaviour.
+        Listening behaviour.
+
+        This is behaviour runs cyclically which adheres to how sockets work (in loop).
+        It listens for incoming connections and messages from agents that are subscribed to the channel.
         """
 
         async def run(self) -> None:
@@ -194,11 +200,8 @@ class APiChannel(APiBaseChannel):
                             logger.error(f"Error accepting client: {e}")
                         return
 
-            # Slusaju se poruke od svih agenata koji su attached, te je ovo cyclic behv jer
-            # rec_until nije awaitan, nego mora biti u loopu. nakon sto se dohvati poruka, onda
-            # se iterira kroz subscribed agente, te se njima salje result
-            if self.agent.attach_servers:
-                for srv in self.agent.attach_servers:
+            if self.agent.write_servers:
+                for srv in self.agent.write_servers:
                     srv.sock.settimeout(0.1)
                     for client in iter_clients(srv):
                         # TODO should put in a method instead
@@ -218,30 +221,24 @@ class APiChannel(APiBaseChannel):
                             print("msasdg", result.decode())
                             logger.info(f"Sending msg: {msg}")
 
-                            if msg:
-                                print("sendingggg")
-                                print("sendingggg")
-                                print("sendingggg")
-                                print("sendingggg")
-                                print("sendingggg")
-                                self.agent.send_to_subscribed_agents(msg.encode())
+                            self.agent.send_to_subscribed_read_agents(msg.encode())
 
     async def setup(self) -> None:
         """
-        Setup the channel.
+        Setup the channel behaviours.
         """
 
         super().setup()
 
-        bsl = self.StatusListening()
+        bsl = self.Ready()
         self.add_behaviour(bsl)
 
         bsubs = self.Subscribe()
         bsubs_template = Template(metadata={"ontology": "APiDataTransfer"})
         self.add_behaviour(bsubs, bsubs_template)
 
-        bfwd = self.Forward()
-        self.add_behaviour(bfwd)
+        blist = self.Listening()
+        self.add_behaviour(blist)
 
 
 def main(

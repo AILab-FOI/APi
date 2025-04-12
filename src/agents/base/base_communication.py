@@ -62,8 +62,8 @@ class APiCommunication(Agent):
         """
         Setup the agent
         """
-        self.behaviour_output = self.OutputQueue()
-        self.add_behaviour(self.behaviour_output)
+        self.behaviour_message_queue = self.MessageQueue()
+        self.add_behaviour(self.behaviour_message_queue)
 
         st_template = Template(metadata={"ontology": "APiScheduling", "action": "stop"})
         st = self.Stop()
@@ -86,15 +86,18 @@ class APiCommunication(Agent):
         # TODO: See if this can be done in a more elegant way ...
         msg = Message(to=to, body=body, metadata=deepcopy(metadata))
         logger.debug(f"Sending message: {msg.metadata} {msg.to}")
-        await self.behaviour_output.send(deepcopy(msg))
+        await self.behaviour_message_queue.send(deepcopy(msg))
         try:
             self.input_ack.add(msg.metadata["reply-with"])
         except KeyError:
             pass
 
-    class OutputQueue(CyclicBehaviour):
+    class MessageQueue(CyclicBehaviour):
         """
-        Output queue behaviour
+        Message queue behaviour.
+
+        SPADE does not offer support sending out messages without specifying a behaviour,
+        hence this behaviour is used as a workaround to send messages out on demand.
         """
 
         async def run(self) -> None:
@@ -102,7 +105,9 @@ class APiCommunication(Agent):
 
     class Stop(CyclicBehaviour):
         """
-        Stop behaviour
+        Stop behaviour.
+
+        This behaviour is used to gracefully stop the agent.
         """
 
         async def run(self) -> None:
@@ -118,11 +123,13 @@ class APiCommunication(Agent):
 
                     await self.agent.stop()
                 else:
-                    logger.debug("Message could not be verified. IMPOSTER!!!!!!")
+                    logger.debug("Message could not be verified.")
 
     class Terminate(CyclicBehaviour):
         """
-        Terminate behaviour
+        Terminate behaviour.
+
+        This behaviour is used to terminate the agent.
         """
 
         async def run(self) -> None:
@@ -131,4 +138,4 @@ class APiCommunication(Agent):
                 if self.agent.verify(msg):
                     await self.agent.stop()
                 else:
-                    logger.debug("Message could not be verified. IMPOSTER!!!!!!")
+                    logger.debug("Message could not be verified.")

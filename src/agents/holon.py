@@ -477,7 +477,7 @@ class APiHolon(APiCommunication):
                     await self.agent.schedule_message(str(msg.sender), metadata=metadata)
 
                 else:
-                    logger.debug("Message could not be verified. IMPOSTER!!!!!!")
+                    logger.debug("Message could not be verified.")
                     metadata = deepcopy(self.agent.refuse_message_template)
                     metadata["in-reply-to"] = msg.metadata["reply-with"]
                     await self.agent.schedule_message(str(msg.sender), metadata=metadata)
@@ -504,7 +504,7 @@ class APiHolon(APiCommunication):
                     )
                     self.agent.agents[agent]["status"] = "ready"
                 else:
-                    logger.debug("Message could not be verified. IMPOSTER!!!!!!")
+                    logger.debug("Message could not be verified.")
                     metadata = deepcopy(self.agent.refuse_message_template)
                     metadata["in-reply-to"] = msg.metadata["reply-with"]
                     await self.agent.schedule_message(str(msg.sender), metadata=metadata)
@@ -553,7 +553,7 @@ class APiHolon(APiCommunication):
                     elif type == "environment":
                         self.agent.environment["status"] = "listening"
                 else:
-                    logger.debug("Message could not be verified. IMPOSTER!!!!!!")
+                    logger.debug("Message could not be verified.")
                     metadata = deepcopy(self.agent.refuse_message_template)
                     metadata["in-reply-to"] = msg.metadata["reply-with"]
                     await self.agent.schedule_message(str(msg.sender), metadata=metadata)
@@ -667,7 +667,7 @@ class APiHolon(APiCommunication):
                     await self.agent.schedule_message(str(msg.sender), metadata=metadata)
 
                 else:
-                    logger.debug("Message could not be verified. IMPOSTER!!!!!!")
+                    logger.debug("Message could not be verified.")
                     metadata = deepcopy(self.agent.refuse_message_template)
                     metadata["in-reply-to"] = msg.metadata["reply-with"]
                     await self.agent.schedule_message(str(msg.sender), metadata=metadata)
@@ -719,7 +719,7 @@ class APiHolon(APiCommunication):
                         await super().stop()
 
                 else:
-                    logger.debug("Message could not be verified. IMPOSTER!!!!!!")
+                    logger.debug("Message could not be verified.")
                     metadata = deepcopy(self.agent.refuse_message_template)
                     metadata["in-reply-to"] = msg.metadata["reply-with"]
                     await self.agent.schedule_message(str(msg.sender), metadata=metadata)
