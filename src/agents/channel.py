@@ -1,33 +1,38 @@
-from src.agents.base.base_channel_agent import APiBaseChannel
+import argparse
+import asyncio
 import json
 import time
-import argparse
-from threading import Thread
 from copy import deepcopy
-import asyncio
+from threading import Thread
+
 import nclib
 from spade.behaviour import CyclicBehaviour
 from spade.template import Template
+
+from src.agents.base.base_channel import APiBaseChannel
 from src.utils.logger import setup_logger
+from typing import Tuple
 
 logger = setup_logger("channel")
 
 
 class APiChannel(APiBaseChannel):
-    """Channel agent."""
+    """
+    Channel.
+    """
 
     def __init__(
         self,
-        channelname,
-        name,
-        password,
-        holon,
-        token,
-        portrange,
-        protocol,
-        channel_input=None,
-        channel_output=None,
-    ):
+        channelname: str,
+        name: str,
+        password: str,
+        holon: str,
+        token: str,
+        portrange: Tuple[int, int],
+        protocol: str,
+        channel_input: str = None,
+        channel_output: str = None,
+    ) -> None:
         global logger
         logger = setup_logger("channel " + channelname)
 
@@ -42,8 +47,8 @@ class APiChannel(APiBaseChannel):
             channel_output,
         )
 
-        # TODO we can use a single server for attach instead of multiple
-        self.attach_servers = []
+        # TODO we can use a single server for write instead of multiple
+        self.write_servers = []
 
         self.agree_message_template = {}
         self.agree_message_template["performative"] = "agree"
@@ -65,7 +70,7 @@ class APiChannel(APiBaseChannel):
         # one protocol or another
         self.protocol = protocol
         srv, ip, port, protocol = self.get_server(protocol)
-        self.socket_server = {
+        self.read_socket_server = {
             "server": srv,
             "ip": ip,
             "port": port,
@@ -81,10 +86,14 @@ class APiChannel(APiBaseChannel):
         )
         self.cli_socket.start()
 
-    def send_to_subscribed_agents(self, msg):
+    def send_to_subscribed_read_agents(self, msg: bytes) -> None:
+        """
+        Send message to subscribed read agents.
+        """
+
         if self.protocol == "udp":
             for client in self.socket_clients["subscribe"]:
-                self.socket_server["server"].respond(msg, client)
+                self.read_socket_server["server"].respond(msg, client)
         else:
             closed_clients = []
             for idx, client in enumerate(self.socket_clients["subscribe"]):
@@ -98,8 +107,12 @@ class APiChannel(APiBaseChannel):
             # for idx in closed_clients:
             # del self.socket_clients['subscribe][idx]
 
-    def get_subscribe_server(self, protocol):
-        instance = self.socket_server
+    def get_read_server(self, protocol: str) -> Tuple[str, str, int, str]:
+        """
+        Get read server.
+        """
+
+        instance = self.read_socket_server
 
         srv = instance["server"]
         ip = instance["ip"]
@@ -108,63 +121,69 @@ class APiChannel(APiBaseChannel):
 
         return srv, ip, port, protocol
 
-    def get_attach_server(self, protocol):
+    def get_write_server(self, protocol: str) -> Tuple[str, str, int, str]:
+        """
+        Get write server.
+        """
+
         srv, host, port, protocol = self.get_server(protocol)
 
-        self.attach_servers.append(srv)
+        self.write_servers.append(srv)
 
         return srv, host, port, protocol
 
-    class Subscribe(CyclicBehaviour):
-        """Agent wants to listen or write to channel"""
+    class SubscriptionRequest(CyclicBehaviour):
+        """
+        Subscription request behaviour.
 
-        async def run(self):
+        This behaviour is runs cyclically and is used for agent to subscribe to the channel.
+        Agent can either listen (read) to the messages from the channel or send messages (write) to the channel.
+        """
+
+        async def run(self) -> None:
             msg = await self.receive(timeout=0.1)
             if msg:
                 if self.agent.verify(msg):
-                    self.agent.say("(Subscribe) Message verified, processing ...")
+                    logger.debug("(Subscribe) Message verified, processing ...")
                     metadata = deepcopy(self.agent.agree_message_template)
                     metadata["in-reply-to"] = msg.metadata["reply-with"]
                     metadata["agent"] = self.agent.channelname
                     if msg.metadata["performative"] == "subscribe":
                         metadata["type"] = "input"
-                        _, ip, port, protocol = self.agent.get_subscribe_server(
-                            self.agent.protocol
-                        )
+                        _, ip, port, protocol = self.agent.get_read_server(self.agent.protocol)
                         logger.info(f"Added subscribe server: {ip} for port {port}")
                     elif msg.metadata["performative"] == "request":
                         metadata["type"] = "output"
-                        _, ip, port, protocol = self.agent.get_attach_server(
-                            self.agent.protocol
-                        )
-                        logger.info(f"Added attach server: {ip} for port {port}")
+                        _, ip, port, protocol = self.agent.get_write_server(self.agent.protocol)
+                        logger.info(f"Added write server: {ip} for port {port}")
                     else:
-                        self.agent.say("Unknown message")
+                        logger.debug("Unknown message")
                         metadata = self.agent.refuse_message_template
                         metadata["in-reply-to"] = msg.metadata["reply-with"]
                         metadata["reason"] = "unknown-message"
-                        await self.agent.schedule_message(
-                            str(msg.sender), metadata=metadata
-                        )
+                        await self.agent.schedule_message(str(msg.sender), metadata=metadata)
 
                     metadata["server"] = ip
                     metadata["port"] = port
                     metadata["protocol"] = protocol
-                    await self.agent.schedule_message(
-                        str(msg.sender), metadata=metadata
-                    )
+                    await self.agent.schedule_message(str(msg.sender), metadata=metadata)
                     await asyncio.sleep(0.1)
                 else:
-                    self.agent.say("Message could not be verified. IMPOSTER!!!!!!")
+                    logger.debug("Message could not be verified.")
                     metadata = self.agent.refuse_message_template
                     metadata["in-reply-to"] = msg.metadata["reply-with"]
                     metadata["reason"] = "security-policy"
-                    await self.agent.schedule_message(
-                        str(msg.sender), metadata=metadata
-                    )
+                    await self.agent.schedule_message(str(msg.sender), metadata=metadata)
 
-    class Forward(CyclicBehaviour):
-        async def run(self):
+    class AgentMessageListening(CyclicBehaviour):
+        """
+        Message listening behaviour.
+
+        This is behaviour runs cyclically which adheres to how sockets work (in loop).
+        It listens for incoming connections and messages from agents that are subscribed to the channel.
+        """
+
+        async def run(self) -> None:
             def iter_clients(srv):
                 if self.agent.protocol == "udp":
                     yield srv
@@ -181,11 +200,8 @@ class APiChannel(APiBaseChannel):
                             logger.error(f"Error accepting client: {e}")
                         return
 
-            # Slusaju se poruke od svih agenata koji su attached, te je ovo cyclic behv jer
-            # rec_until nije awaitan, nego mora biti u loopu. nakon sto se dohvati poruka, onda
-            # se iterira kroz subscribed agente, te se njima salje result
-            if self.agent.attach_servers:
-                for srv in self.agent.attach_servers:
+            if self.agent.write_servers:
+                for srv in self.agent.write_servers:
                     srv.sock.settimeout(0.1)
                     for client in iter_clients(srv):
                         # TODO should put in a method instead
@@ -197,36 +213,48 @@ class APiChannel(APiBaseChannel):
                                 logger.error(f"Error receiving from client: {e}")
                                 pass
                         else:
-                            result = client.recv_until(
-                                self.agent.delimiter, timeout=0.1
-                            )
+                            result = client.recv_until(self.agent.delimiter, timeout=0.1)
                         logger.info(f"Received result: {result}")
                         if result:
                             logger.info(f"Mapping result: {result}")
                             msg = self.agent.map(result.decode())
+                            print("msasdg", result.decode())
                             logger.info(f"Sending msg: {msg}")
 
-                            self.agent.send_to_subscribed_agents(msg.encode())
+                            self.agent.send_to_subscribed_read_agents(msg.encode())
 
-    async def setup(self):
+    async def setup(self) -> None:
+        """
+        Setup the channel behaviours.
+        """
+
         super().setup()
 
-        bsl = self.StatusListening()
+        # State behaviour
+        bsl = self.Ready()
         self.add_behaviour(bsl)
 
-        bsubs = self.Subscribe()
+        # Subscription request handling
+        bsubs = self.SubscriptionRequest()
         bsubs_template = Template(metadata={"ontology": "APiDataTransfer"})
         self.add_behaviour(bsubs, bsubs_template)
 
-        bfwd = self.Forward()
-        self.add_behaviour(bfwd)
+        # Incoming messages handling
+        blist = self.AgentMessageListening()
+        self.add_behaviour(blist)
 
 
-def main(name, address, password, holon, token, portrange, protocol, input, output):
-    portrange = json.loads(portrange)
-    input = None if input == "null" else input
-    output = None if output == "null" else output
-
+def main(
+    name: str,
+    address: str,
+    password: str,
+    holon: str,
+    token: str,
+    portrange: str,
+    protocol: str,
+    input: str,
+    output: str,
+) -> None:
     a = APiChannel(
         name,
         address,
@@ -253,39 +281,25 @@ def main(name, address, password, holon, token, portrange, protocol, input, outp
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="APi agent.")
-    parser.add_argument(
-        "name", metavar="NAME", type=str, help="Channel's local APi name"
-    )
-    parser.add_argument(
-        "address", metavar="ADDRESS", type=str, help="Channel's XMPP/JID address"
-    )
-    parser.add_argument(
-        "password", metavar="PWD", type=str, help="Channel's XMPP/JID password"
-    )
+    parser.add_argument("name", metavar="NAME", type=str, help="Channel's local APi name")
+    parser.add_argument("address", metavar="ADDRESS", type=str, help="Channel's XMPP/JID address")
+    parser.add_argument("password", metavar="PWD", type=str, help="Channel's XMPP/JID password")
     parser.add_argument(
         "holon",
         metavar="HOLON",
         type=str,
         help="Channel's instantiating holon's XMPP/JID address",
     )
-    parser.add_argument(
-        "token", metavar="TOKEN", type=str, help="Channel's security token"
-    )
-    parser.add_argument(
-        "portrange", metavar="PORTRANGE", type=str, help="Channel's port range"
-    )
+    parser.add_argument("token", metavar="TOKEN", type=str, help="Channel's security token")
+    parser.add_argument("portrange", metavar="PORTRANGE", type=str, help="Channel's port range")
     parser.add_argument(
         "protocol",
         metavar="PROTOCOL",
         type=str,
         help="Channel's protocol specification",
     )
-    parser.add_argument(
-        "input", metavar="INPUT", type=str, help="Channel's input specification"
-    )
-    parser.add_argument(
-        "output", metavar="OUTPUT", type=str, help="Channel's output specification"
-    )
+    parser.add_argument("input", metavar="INPUT", type=str, help="Channel's input specification")
+    parser.add_argument("output", metavar="OUTPUT", type=str, help="Channel's output specification")
 
     args = parser.parse_args()
     main(

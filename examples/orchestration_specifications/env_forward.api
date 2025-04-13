@@ -1,5 +1,5 @@
 agent bla_stdin_stdout : 
 	ENV_INPUT -> self 
 agent bla_file_stdout : 
-	self -> ENV_INPUT 
+	self -> ENV_OUTPUT 
 environment . 

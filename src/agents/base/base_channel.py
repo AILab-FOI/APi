@@ -1,29 +1,38 @@
 import re
-import xmltodict
-from src.agents.base.base_talking_agent import APiTalkingAgent
-from spade.behaviour import OneShotBehaviour
-from copy import deepcopy
-from pyxf.pyxf import swipl
 import socket
+from copy import deepcopy
+
 import nclib
+import xmltodict
+from pyxf.pyxf import swipl
+from spade.behaviour import OneShotBehaviour
+
+from src.agents.base.base_communication import APiCommunication
 from src.utils.logger import setup_logger
+from typing import Tuple, Dict, List, Union, Optional
+import json
 
-logger = setup_logger("base_channel_agent")
+
+logger = setup_logger("base_channel")
 
 
-class APiBaseChannel(APiTalkingAgent):
+class APiBaseChannel(APiCommunication):
+    """
+    Base channel implementation.
+    """
+
     REPL_STR = '"$$$API_THIS_IS_VARIABLE_%s$$$"'
 
     def __init__(
         self,
-        channelname,
-        name,
-        password,
-        holon,
-        token,
-        portrange,
-        channel_input=None,
-        channel_output=None,
+        channelname: str,
+        name: str,
+        password: str,
+        holon: str,
+        token: Optional[str] = None,
+        portrange: Optional[Tuple[int, int]] = None,
+        channel_input: Optional[str] = None,
+        channel_output: Optional[str] = None,
     ):
         global logger
         logger = setup_logger("channel " + channelname)
@@ -35,24 +44,14 @@ class APiBaseChannel(APiTalkingAgent):
         self.kb = swipl()
         self.var_re = re.compile(r"[\?][a-zA-Z][a-zA-Z0-9-_]*")
 
-        self.min_port, self.max_port = portrange
+        self.min_port, self.max_port = json.loads(portrange)
 
         self.input = channel_input
         self.output = channel_output
 
         self.socket_clients = {}
 
-        # TODO: return map function based on channel_input/output
-        # descriptor (can be JSON, XML, REGEX, TRANSFORMER, TRANSPARENT)
-        # * JSON -> JSON input or output
-        # XML -> XML input or output
-        # * REGEX -> Python style regex (with named groups) input
-        # TRANSFORMER -> read definition from channel description (.cd) file
-        # * TRANSPARENT -> no mapping needed, just forward
-        #
-        # * -> Done!
-
-        if self.input is None or self.output is None:
+        if not self.input or not self.output:
             self.map = lambda x: x
         else:
             if self.input.startswith("regex("):
@@ -68,10 +67,7 @@ class APiBaseChannel(APiTalkingAgent):
                     rpl = self.REPL_STR % var
                     replaces[rpl[1:-1]] = var
                     cp = cp.replace(var, rpl)
-                query = (
-                    " APIRES = ok, open_string( '%s', S ), json_read_dict( S, X ). "
-                    % cp
-                )
+                query = " APIRES = ok, open_string( '%s', S ), json_read_dict( S, X ). " % cp
                 res = self.kb.query(query)
                 prolog_json = res[0]["X"]
                 for k, v in replaces.items():
@@ -93,16 +89,20 @@ class APiBaseChannel(APiTalkingAgent):
                     input_xml = cp.replace(k, "X" + v[1:])
 
                 input_xml = xmltodict.parse(input_xml)
-                self.input_xml = (
-                    str(input_xml).replace(" ", "").replace("'", "").replace("@", "")
-                )
+                self.input_xml = str(input_xml).replace(" ", "").replace("'", "").replace("@", "")
 
                 self.map = self.map_xml
 
-    def map(self, data):
-        pass
+    def map(self, data: str) -> str:
+        """
+        Map the data to the input
+        """
+        return data
 
-    def map_re(self, data):
+    def map_re(self, data: str) -> str:
+        """
+        Map the data to the input using a regex
+        """
         match = self.input_re.match(data)
         vars = self.input_re.groupindex.keys()
         results = {}
@@ -118,7 +118,10 @@ class APiBaseChannel(APiTalkingAgent):
 
         return self.format_output(res)
 
-    def format_output(self, res):
+    def format_output(self, res: List[Dict]) -> str:
+        """
+        Format the output
+        """
         output = self.output
 
         if self.output.startswith("json("):
@@ -131,11 +134,12 @@ class APiBaseChannel(APiTalkingAgent):
 
         return output
 
-    def map_json(self, data):
+    def map_json(self, data: str) -> str:
+        """
+        Map the data to the input using a JSON
+        """
         try:
-            query = (
-                " APIRES = ok, open_string( '%s', S ), json_read_dict( S, X ). " % data
-            )
+            query = " APIRES = ok, open_string( '%s', S ), json_read_dict( S, X ). " % data
             res = self.kb.query(query)
             prolog_json = res[0]["X"]
             query = " APIRES = ok, X = %s, Y = %s, X = Y. " % (
@@ -149,7 +153,10 @@ class APiBaseChannel(APiTalkingAgent):
         except:
             return ""
 
-    def map_xml(self, data):
+    def map_xml(self, data: str) -> str:
+        """
+        Map the data to the input using a XML
+        """
         try:
             data = xmltodict.parse(data)
             data = str(data).replace(" ", "").replace("'", "").replace("@", "")
@@ -163,7 +170,12 @@ class APiBaseChannel(APiTalkingAgent):
         except:
             return ""
 
-    def get_server_clients(self, server, ref_var_name, protocol):
+    def get_server_clients(
+        self, server: Union[nclib.UDPServer, nclib.TCPServer], ref_var_name: str, protocol: str
+    ) -> None:
+        """
+        Get the server clients
+        """
         if protocol == "udp":
             for _, client in server:
                 self.socket_clients[ref_var_name].append(client)
@@ -171,8 +183,10 @@ class APiBaseChannel(APiTalkingAgent):
             for client in server:
                 self.socket_clients[ref_var_name].append(client)
 
-    def get_free_port(self, protocol):
-        """Get a free port on the host"""
+    def get_free_port(self, protocol: str) -> int:
+        """
+        Get a free port on the host
+        """
         if protocol == "tcp":
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         else:
@@ -187,8 +201,10 @@ class APiBaseChannel(APiTalkingAgent):
                 port += 1
         raise IOError("No free ports in range %d - %d" % (self.min_port, self.max_port))
 
-    def get_ip(self):
-        """Get the current IP address of the agent"""
+    def get_ip(self) -> str:
+        """
+        Get the current IP address of the agent
+        """
         # TODO: Verify this works with outside network
         #       addresses!
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -202,7 +218,10 @@ class APiBaseChannel(APiTalkingAgent):
             s.close()
         return IP
 
-    def create_server(self, port, protocol):
+    def create_server(self, port: int, protocol: str) -> Union[nclib.UDPServer, nclib.TCPServer]:
+        """
+        Create a server
+        """
         if protocol == "udp":
             srv = nclib.UDPServer(("0.0.0.0", port))
             srv.sock.bind(("0.0.0.0", port))
@@ -210,12 +229,14 @@ class APiBaseChannel(APiTalkingAgent):
 
         return nclib.TCPServer(("0.0.0.0", port))
 
-    def get_server(self, protocol):
-        """Get a NetCat server for sending or receiving"""
+    def get_server(
+        self, protocol: str
+    ) -> Tuple[Union[nclib.UDPServer, nclib.TCPServer], str, str, str]:
+        """
+        Get a NetCat server for sending or receiving
+        """
         port = self.get_free_port(protocol)
         host = self.get_ip()
-
-        self.say(host, port)
 
         srv_created = False
         while not srv_created:
@@ -229,7 +250,14 @@ class APiBaseChannel(APiTalkingAgent):
 
         return srv, host, str(port), protocol
 
-    class StatusListening(OneShotBehaviour):
+    class Ready(OneShotBehaviour):
+        """
+        Ready behaviour.
+
+        Once the channel is created, this one shot behaviour is used to inform the holon of
+        the channel's status.
+        """
+
         async def run(self):
             metadata = deepcopy(self.agent.inform_msg_template)
             metadata["status"] = "listening"

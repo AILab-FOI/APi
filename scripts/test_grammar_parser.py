@@ -6,7 +6,7 @@ from src.grammar.listener import APi
 import os
 
 
-def process(lexer):
+def process(lexer: APiLexer) -> None:
     lexer.recover = lambda x: sys.exit()
     stream = CommonTokenStream(lexer)
     parser = APiParser(stream)
@@ -21,7 +21,7 @@ def process(lexer):
         print(str(e))
 
 
-def main(dir: str):
+def main(dir: str) -> None:
     os.chdir(dir)
     if len(sys.argv) != 2:
         lexer = APiLexer(StdinStream())
