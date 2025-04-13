@@ -532,39 +532,45 @@ class APiAgent(APiBaseWrapperAgent):
 
         super().setup()
 
+        # State behaviours
         self.behaviour_sl = self.Ready()
         self.add_behaviour(self.behaviour_sl)
 
+        # Address handling behaviours
         self.behaviour_gca = self.RequestAdresses()
         self.add_behaviour(self.behaviour_gca)
 
-        self.behaviour_qc = self.ReceiveAdresses()
+        self.behaviour_qc = self.ReceiveAddress()
         bqc_template = Template(metadata={"ontology": "APiQuery"})
         self.add_behaviour(self.behaviour_qc, bqc_template)
 
-        self.behaviour_stic = self.SubscribeToReadFromChannels()
+        # Request subscribe to channels and environments
+        self.behaviour_stic = self.RequestSubscribeToReadFromChannels()
         self.add_behaviour(self.behaviour_stic)
 
-        self.behaviour_atoc = self.SubscribeToWriteToChannels()
+        self.behaviour_atoc = self.RequestSubscribeToWriteToChannels()
         self.add_behaviour(self.behaviour_atoc)
 
-        self.behaviour_ste = self.SubscribeToReadFromInputEnvironment()
+        self.behaviour_ste = self.RequestSubscribeToReadFromInputEnvironment()
         self.add_behaviour(self.behaviour_ste)
 
-        self.behaviour_ate = self.SubscribeToWriteToOutputEnvironment()
+        self.behaviour_ate = self.RequestSubscribeToWriteToOutputEnvironment()
         self.add_behaviour(self.behaviour_ate)
 
-        self.behaviour_sic = self.SetupReadChannelSockets()
+        # Setup sockets
+        self.behaviour_sic = self.SetupReadSockets()
         bsic_template = Template(metadata={"ontology": "APiDataTransfer", "type": "input"})
         self.add_behaviour(self.behaviour_sic, bsic_template)
 
-        self.behaviour_soc = self.SetupWriteChannelSockets()
+        self.behaviour_soc = self.SetupWriteSockets()
         bsoc_template = Template(metadata={"ontology": "APiDataTransfer", "type": "output"})
         self.add_behaviour(self.behaviour_soc, bsoc_template)
 
+        # Listening behaviour
         # Note: this behaviour is attached inside Start behaviour
-        self.behaviour_l = self.Listening()
+        self.behaviour_l = self.MessageListening()
 
+        # State behaviour
         self.behaviour_ss = self.Start()
         bss_template = Template(metadata={"ontology": "APiScheduling", "action": "start"})
         self.add_behaviour(self.behaviour_ss, bss_template)
@@ -625,7 +631,7 @@ class APiAgent(APiBaseWrapperAgent):
                 metadata["channel"] = "ENVIRONMENT"
                 await self.agent.schedule_message(self.agent.holon, metadata=metadata)
 
-    class SubscribeToReadFromChannels(OneShotBehaviour):
+    class RequestSubscribeToReadFromChannels(OneShotBehaviour):
         """
         Subscribe to read from channels behaviour.
 
@@ -644,7 +650,7 @@ class APiAgent(APiBaseWrapperAgent):
                 metadata["reply-with"] = str(uuid4().hex)
                 await self.agent.schedule_message(channel, metadata=metadata)
 
-    class SubscribeToWriteToChannels(OneShotBehaviour):
+    class RequestSubscribeToWriteToChannels(OneShotBehaviour):
         """
         Subscribe to write to channels behaviour.
 
@@ -663,7 +669,7 @@ class APiAgent(APiBaseWrapperAgent):
                 metadata["reply-with"] = str(uuid4().hex)
                 await self.agent.schedule_message(channel, metadata=metadata)
 
-    class SubscribeToReadFromInputEnvironment(OneShotBehaviour):
+    class RequestSubscribeToReadFromInputEnvironment(OneShotBehaviour):
         """
         Subscribe to read from input environment behaviour.
 
@@ -685,7 +691,7 @@ class APiAgent(APiBaseWrapperAgent):
                 metadata["reply-with"] = str(uuid4().hex)
                 await self.agent.schedule_message(channel, metadata=metadata)
 
-    class SubscribeToWriteToOutputEnvironment(OneShotBehaviour):
+    class RequestSubscribeToWriteToOutputEnvironment(OneShotBehaviour):
         """
         Subscribe to read from input environment behaviour.
 
@@ -709,9 +715,9 @@ class APiAgent(APiBaseWrapperAgent):
                 metadata["reply-with"] = str(uuid4().hex)
                 await self.agent.schedule_message(env, metadata=metadata)
 
-    class ReceiveAdresses(CyclicBehaviour):
+    class ReceiveAddress(CyclicBehaviour):
         """
-        Receive addresses behaviour.
+        Receive address behaviour.
 
         Holon will pass down the address book to the agent for the requested channels.
         """
@@ -743,11 +749,12 @@ class APiAgent(APiBaseWrapperAgent):
                 else:
                     logger.debug("Message could not be verified.")
 
-    class SetupReadChannelSockets(CyclicBehaviour):
+    class SetupReadSockets(CyclicBehaviour):
         """
-        Setup read channel sockets behaviour.
+        Setup read sockets behaviour.
 
-        Once agent has requested to subscribe to channel, channel will query back with open socket details.
+        Once agent has requested to subscribe to read channel, environment or holon, the entity will query back with open socket details,
+        that this agent will use to setup the sockets.
         """
 
         async def run(self):
@@ -755,7 +762,7 @@ class APiAgent(APiBaseWrapperAgent):
             msg = await self.receive(timeout=1)
             if msg:
                 if self.agent.verify(msg):
-                    logger.debug("(SetupReadChannelSockets) Message verified, processing ...")
+                    logger.debug("(SetupReadSockets) Message verified, processing ...")
                     try:
                         self.agent.input_ack.remove(msg.metadata["in-reply-to"])
                         if msg.metadata["performative"] == "refuse":
@@ -768,7 +775,7 @@ class APiAgent(APiBaseWrapperAgent):
                             is_udp = msg.metadata["protocol"] == "udp"
                             servers = self.agent.input_channel_servers
                             logger.debug(
-                                f"(SetupReadChannelSockets) Setting up {msg.metadata['type']} channel {channel}"
+                                f"(SetupReadSockets) Setting up {msg.metadata['type']} channel {channel}"
                             )
                             servers[channel] = {}
                             servers[channel]["server"] = msg.metadata["server"]
@@ -804,11 +811,12 @@ class APiAgent(APiBaseWrapperAgent):
                 else:
                     logger.debug("Message could not be verified.")
 
-    class SetupWriteChannelSockets(CyclicBehaviour):
+    class SetupWriteSockets(CyclicBehaviour):
         """
-        Setup write channel sockets behaviour.
+        Setup write sockets behaviour.
 
-        Once agent has requested to subscribe to channel, channel will query back with open socket details.
+        Once agent has requested to subscribe to write channel, environment or holon, the entity will query back with open socket details,
+        that this agent will use to setup the sockets.
         """
 
         async def run(self) -> None:
@@ -862,9 +870,9 @@ class APiAgent(APiBaseWrapperAgent):
                 else:
                     logger.debug("Message could not be verified.")
 
-    class Listening(CyclicBehaviour):
+    class MessageListening(CyclicBehaviour):
         """
-        Listening behaviour.
+        Message listening behaviour.
 
         This is behaviour runs cyclically which adheres to how sockets work (in loop).
         It listens for incoming connections and messages from channels / environment that this agent is subscribed to.

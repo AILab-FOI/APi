@@ -205,6 +205,7 @@ class APiHolon(APiCommunication):
                 env["output_protocol"],
                 json.dumps(env["input"]).replace('"', '""'),
                 json.dumps(env["output"]).replace('"', '""'),
+                json.dumps(self.holons).replace('"', '\\"'),
             )
         )
         environment["address"] = address
@@ -391,7 +392,7 @@ class APiHolon(APiCommunication):
 
         super().setup()
 
-        bqn = self.AgentRequestForAddress()
+        bqn = self.RequestForAddress()
         bqn_template = Template(metadata={"performative": "query-ref", "ontology": "APiQuery"})
         self.add_behaviour(bqn, bqn_template)
 
@@ -442,7 +443,7 @@ class APiHolon(APiCommunication):
         )
         self.add_behaviour(bsa, bsa_template)
 
-    class AgentRequestForAddress(CyclicBehaviour):
+    class RequestForAddress(CyclicBehaviour):
         """
         Agent request for address.
 

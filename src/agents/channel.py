@@ -132,9 +132,9 @@ class APiChannel(APiBaseChannel):
 
         return srv, host, port, protocol
 
-    class Subscribe(CyclicBehaviour):
+    class SubscriptionRequest(CyclicBehaviour):
         """
-        Subscribe behaviour.
+        Subscription request behaviour.
 
         This behaviour is runs cyclically and is used for agent to subscribe to the channel.
         Agent can either listen (read) to the messages from the channel or send messages (write) to the channel.
@@ -175,9 +175,9 @@ class APiChannel(APiBaseChannel):
                     metadata["reason"] = "security-policy"
                     await self.agent.schedule_message(str(msg.sender), metadata=metadata)
 
-    class Listening(CyclicBehaviour):
+    class AgentMessageListening(CyclicBehaviour):
         """
-        Listening behaviour.
+        Message listening behaviour.
 
         This is behaviour runs cyclically which adheres to how sockets work (in loop).
         It listens for incoming connections and messages from agents that are subscribed to the channel.
@@ -230,14 +230,17 @@ class APiChannel(APiBaseChannel):
 
         super().setup()
 
+        # State behaviour
         bsl = self.Ready()
         self.add_behaviour(bsl)
 
-        bsubs = self.Subscribe()
+        # Subscription request handling
+        bsubs = self.SubscriptionRequest()
         bsubs_template = Template(metadata={"ontology": "APiDataTransfer"})
         self.add_behaviour(bsubs, bsubs_template)
 
-        blist = self.Listening()
+        # Incoming messages handling
+        blist = self.AgentMessageListening()
         self.add_behaviour(blist)
 
 
