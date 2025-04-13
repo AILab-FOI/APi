@@ -117,14 +117,14 @@ agent:
 - Minimal code change for agent integration.
 - Lightweight and formal programming language.
 - Scalable, hierarchical (holonic) architecture.
-- Supports modern deployment environments.
+- Supports cloud deployment environments.
 
 ### Cons
 
 - Requires learning a new language.
 - Cannot orchestrate already-running agents.
 - Lacks built-in security/authentication.
-- Race conditions in some coordination flows.
+- Error handling does not cover all edge cases.
 - No GUI for orchestration visualization.
 - Agents must be predefined, not dynamically registered.
 
