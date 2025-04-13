@@ -51,16 +51,6 @@ class APiBaseChannel(APiCommunication):
 
         self.socket_clients = {}
 
-        # TODO: return map function based on channel_input/output
-        # descriptor (can be JSON, XML, REGEX, TRANSFORMER, TRANSPARENT)
-        # * JSON -> JSON input or output
-        # XML -> XML input or output
-        # * REGEX -> Python style regex (with named groups) input
-        # TRANSFORMER -> read definition from channel description (.cd) file
-        # * TRANSPARENT -> no mapping needed, just forward
-        #
-        # * -> Done!
-
         if not self.input or not self.output:
             self.map = lambda x: x
         else:
