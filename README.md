@@ -156,6 +156,7 @@ api/
 ├── .env.sample # Sample environment variables file
 ├── pyproject.toml # Python dependencies
 ├── data/ # Data files for Prosody server
+├── public/ # Files for documentation
 ```
 
 # Local setup
@@ -176,6 +177,10 @@ Run the following steps to start up the dockerized environment:
 3. Create a copy of `.env.sample`, name it `.env` and adjust values accordingly
 4. From inside the bash shell: `poetry run python3 src/main.py basic.api` -- in order to run the application with the communication flows specification file
 5. To view live prosody logs, which might be helpful as they preview connections, run: `docker logs -f --tail 10 prosody`
+
+Once correctly started, you should see an output such as below:
+
+![APi running](public/running_api.png)
 
 ## Running Dockererized agents inside the Platform container
 
